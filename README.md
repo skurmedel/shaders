@@ -5,7 +5,7 @@ Shaders for various 3D-applications.
 
 ## maya_phong.cgfx
 
-![Example screenshot](maya_phong_example.png)
+![Example screenshot](shaders/blob/master/maya_phong_example.png)
 
 This is a Maya CGFX viewport shader. Currently it implements the Phong-Lambert shading model.
 
