@@ -25,6 +25,12 @@ texture diffuse_tex
 	string UIName =  "Diffuse Texture";
 >;
 
+texture normalmap_tex
+<
+	string ResourceType = "2D";
+	string UIName =  "Normal Map Texture";
+>;
+
 float3 light_pos : POSITION
 <
 	string UIHelp = "Light Position";
@@ -33,6 +39,13 @@ float3 light_pos : POSITION
 sampler2D diffuse_tex_sampler = sampler_state 
 {
 	Texture = <diffuse_tex>;
+	MinFilter = LinearMipMapLinear;
+	MagFilter = Linear;
+};
+
+sampler2D normalmap_tex_sampler = sampler_state 
+{
+	Texture = <normalmap_tex>;
 	MinFilter = LinearMipMapLinear;
 	MagFilter = Linear;
 };
@@ -106,7 +119,7 @@ float3 calculate_diffuse(float lamb_term, float2 texCoord)
 	// Add the ambient term here, might not be strictly kosher but
 	// gives a better looking ambient where the diffuse texture 
 	// contributes.
-	float diffuse_coef = float3(lamb_term, lamb_term, lamb_term) + ambient;
+	float3 diffuse_coef = float3(lamb_term, lamb_term, lamb_term) + ambient;
 	return diffuse_coef * tex2D(diffuse_tex_sampler, texCoord).xyz;
 }
 
@@ -124,17 +137,19 @@ float3 calculate_spec(float3 light_dir, float3 normal, float3 camera_dir)
 
 float4 fragment_f(vertex_out IN) : COLOR 
 {
-	float bump = tex2D(diffuse_tex_sampler, IN.texCoord0).x / 10;
+	float3 normal = IN.normal;
+	// Not used yet, will be used for normal mapping.
+	float3 mapped_normal = tex2D(normalmap_tex_sampler, IN.texCoord0);
 
-	float3 light_dir = get_light_dir(IN.os_pos + (IN.normal * bump), light_pos);
+	float3 light_dir = get_light_dir(IN.os_pos, light_pos);
 
 	float3 diff_term = calculate_diffuse(
 		get_lambert(
 			light_dir, 
-			IN.normal), 
+			normal), 
 		IN.texCoord0);
 
-	float3 spec_term = calculate_spec(light_dir, IN.normal, IN.camera_dir);
+	float3 spec_term = calculate_spec(light_dir, normal, IN.camera_dir);
 	
 	return saturate(float4(ambient + diff_term + spec_term, 1)); 
 }
