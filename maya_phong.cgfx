@@ -51,29 +51,35 @@ texture normalmap_tex
 	string UIName =  "Normal Map Texture";
 >;
 
+texture specular_tex
+<
+	string ResourceType = "2D";
+	string UIName =  "Normal Map Texture";
+>;
+
 // LIGHT 1
 
 float3 light1_pos : POSITION
 <
 	string UIHelp = "Light 1 Position";
-> = {0, 1, 0};
+> = {250, 250, -70};
 
 float3 light1_color : DIFFUSE
 <
 	string UIName = "Light 1 Colour";
 	string UIWidget = "Color";
-> = {1, 1, 1};
+> = {1.480, 1.470, 1.381};
 
 float3 light2_pos : POSITION
 <
 	string UIHelp = "Light 2 Position";
-> = {0, 1, 0};
+> = {160, 0, 670};
 
 float3 light2_color : DIFFUSE
 <
 	string UIName = "Light 2 Colour";
 	string UIWidget = "Color";
-> = {1, 1, 1};
+> = {0.650, 0.8, 1.25};
 
 // TEXTURES.
 
@@ -98,6 +104,18 @@ sampler2D normalmap_tex_sampler
 		MinFilter = LinearMipMapLinear;
 		MagFilter = Linear;
 	};
+
+sampler2D spec_tex_sampler
+<
+	string UIName = "Specular Map";
+> =
+	sampler_state  
+	{
+		Texture = <specular_tex>;
+		MinFilter = LinearMipMapLinear;
+		MagFilter = Linear;
+	};
+
 
 bool flip_y_normal
 <
@@ -199,15 +217,14 @@ float3 calculate_diffuse(float2 lamb_term, float2 texCoord)
 }
 
 // Calculates a Phong specular term.
-float3 calculate_spec(float3 light_dir, float3 normal, float3 camera_dir)
+float3 calculate_spec(float3 light_dir, float3 normal, float3 camera_dir, float2 texCoord)
 {
 	float3 light_reflect = reflect(light_dir, normal);
 	// We use max here to remove highlights for surface points pointing away from the light.
 	float light_to_camera_ang = max(dot(light_reflect, camera_dir), 0);
 
-	// Light has no specular component yet, or colour.
-	float3 light_spec = float3(1, 1, 1);
-	return pow(light_to_camera_ang, spec_exponent) * light_spec;
+	// Technically, the light has a specular term too, but we don't care.
+	return pow(light_to_camera_ang, spec_exponent) * tex2D(spec_tex_sampler, texCoord);
 }
 
 float4 fragment_f(vertex_out IN) : COLOR 
@@ -245,7 +262,7 @@ float4 fragment_f(vertex_out IN) : COLOR
 		),
 		IN.texCoord0);
 
-	float3 spec_term = calculate_spec(light1_dir_tspace, normal, camera_dir_tspace);
+	float3 spec_term = calculate_spec(light1_dir_tspace, normal, camera_dir_tspace, IN.texCoord0);
 	
 	return saturate(float4(ambient + diff_term + spec_term, 1)); 
 }
