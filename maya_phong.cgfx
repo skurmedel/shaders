@@ -268,10 +268,10 @@ float4 fragment_f(vertex_out IN) : COLOR
 
 technique main {
 	pass p0 {
-		VertexProgram = compile gp4vp vertex_f();
+		VertexProgram = compile vs_3_0 vertex_f();
 		DepthTestEnable = true;
 		DepthMask = true;
 		CullFaceEnable = false;
-		FragmentProgram = compile gp4fp fragment_f();
+		FragmentProgram = compile ps_3_0 fragment_f();
 	}
 }
