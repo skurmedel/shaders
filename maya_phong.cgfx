@@ -213,7 +213,7 @@ float3 calculate_diffuse(float2 lamb_term, float2 texCoord)
 	// light 2
 	light_contrib += calculate_light_contrib(lamb_term.y, diffuse_map_term, light2_color);
 
-	return light_contrib;
+	return light_contrib + (ambient * diffuse_map_term);
 }
 
 // Calculates a Phong specular term.
@@ -264,7 +264,7 @@ float4 fragment_f(vertex_out IN) : COLOR
 
 	float3 spec_term = calculate_spec(light1_dir_tspace, normal, camera_dir_tspace, IN.texCoord0);
 	
-	return saturate(float4(ambient + diff_term + spec_term, 1)); 
+	return saturate(float4(diff_term + spec_term, 1)); 
 }
 
 technique main {
