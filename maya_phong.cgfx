@@ -85,6 +85,9 @@ struct vertex_out
 	float3 os_pos;
 	float3 camera_dir;
 	float3 normal;
+
+	float3 tangent;
+	float3 binormal;
 };
 
 float get_lambert(float3 light_dir, float3 normal)
@@ -110,7 +113,9 @@ vertex_out vertex_f(appdata IN)
 	OUT.camera_dir = normalize(mul(WorldViewProjInverseXf, float4(0, 0, 1, 1))).xyz;
 
 	OUT.normal = IN.normal.xyz;
-	
+	OUT.tangent = IN.tangent.xyz;
+	OUT.binormal = IN.binormal.xyz;
+
 	return OUT;
 }
 
@@ -137,19 +142,31 @@ float3 calculate_spec(float3 light_dir, float3 normal, float3 camera_dir)
 
 float4 fragment_f(vertex_out IN) : COLOR 
 {
-	float3 normal = IN.normal;
-	// Not used yet, will be used for normal mapping.
-	float3 mapped_normal = tex2D(normalmap_tex_sampler, IN.texCoord0);
+	float3 normal;
+	float3x3 tang_transform = {IN.tangent, IN.binormal, IN.normal};
+	
+	float3 mapped_normal = lerp(float4(-1.0), float4(1.0), tex2D(normalmap_tex_sampler, IN.texCoord0));
+	if (mapped_normal.x == 1.0 && mapped_normal.y == 1.0 && mapped_normal.z == 1.0)
+	{
+		normal = mul(tang_transform, IN.normal);
+	}
+	else
+	{
+		normal = mapped_normal.xyz;
+	}
+
+	// Todo: Clean up all the tangent space transformations here.
+	// Todo: We can calculate the tangent transform in the vertex shader.
 
 	float3 light_dir = get_light_dir(IN.os_pos, light_pos);
 
 	float3 diff_term = calculate_diffuse(
 		get_lambert(
-			light_dir, 
+			mul(tang_transform, light_dir), 
 			normal), 
 		IN.texCoord0);
 
-	float3 spec_term = calculate_spec(light_dir, normal, IN.camera_dir);
+	float3 spec_term = calculate_spec(mul(tang_transform, light_dir), normal, mul(tang_transform, IN.camera_dir));
 	
 	return saturate(float4(ambient + diff_term + spec_term, 1)); 
 }
