@@ -50,6 +50,11 @@ sampler2D normalmap_tex_sampler = sampler_state
 	MagFilter = Linear;
 };
 
+bool flip_y_normal
+<
+	string UIHelp = "Flip Y Normal (UDK, CryEngine etc.)";
+> = false;
+
 //
 // Provided by Maya for viewspace transform.
 // object space -> clip space
@@ -143,7 +148,7 @@ float3 calculate_spec(float3 light_dir, float3 normal, float3 camera_dir)
 float4 fragment_f(vertex_out IN) : COLOR 
 {
 	float3 normal;
-	float3x3 tang_transform = {IN.tangent, IN.binormal, IN.normal};
+	float3x3 tang_transform = {IN.tangent, flip_y_normal? -IN.binormal : IN.binormal, IN.normal};
 	
 	float3 mapped_normal = lerp(float4(-1.0), float4(1.0), tex2D(normalmap_tex_sampler, IN.texCoord0));
 	if (mapped_normal.x == 1.0 && mapped_normal.y == 1.0 && mapped_normal.z == 1.0)
