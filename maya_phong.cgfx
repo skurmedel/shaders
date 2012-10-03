@@ -105,6 +105,11 @@ sampler2D normalmap_tex_sampler
 		MagFilter = Linear;
 	};
 
+bool flip_y_normal
+<
+	string UIHelp = "Flip Y Normal (UDK, CryEngine etc.)";
+> = false;
+
 sampler2D spec_tex_sampler
 <
 	string UIName = "Specular Map";
@@ -115,12 +120,6 @@ sampler2D spec_tex_sampler
 		MinFilter = LinearMipMapLinear;
 		MagFilter = Linear;
 	};
-
-
-bool flip_y_normal
-<
-	string UIHelp = "Flip Y Normal (UDK, CryEngine etc.)";
-> = false;
 
 //
 // Provided by Maya for viewspace transform.
