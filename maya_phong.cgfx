@@ -262,6 +262,7 @@ float4 fragment_f(vertex_out IN) : COLOR
 	float3 camera_tsdir = mul(IN.tangent_transform, IN.camera_dir);
 
 	float3 normal = mul(IN.tangent_transform, IN.normal);
+	// Todo: might be more efficient as tex2D(normalmap_tex_sampler, IN.texCoord0) * 2 - 1
 	float3 mapped_normal = 
 		lerp(
 			float4(-1.0), 
