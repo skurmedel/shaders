@@ -23,7 +23,15 @@
 // Loads into Maya using the bundled CGFX Shader Plugin.
 // 
 
-// Maya friendly parameters.
+// Some notes about variable naming.
+// - dir = direction
+// - pos = position
+// - tsdir & tspos = same but in tangent space.
+// - osdir & ospos = same but in object space.
+
+// ######################################################################
+// UNIFORM PARAMETERS.
+// ######################################################################
 
 // An additive ambient term, set to black for no ambient.
 float3 ambient : DIFFUSE
@@ -69,6 +77,8 @@ float3 light1_color : DIFFUSE
 	string UIName = "Light 1 Colour";
 	string UIWidget = "Color";
 > = {1.480, 1.470, 1.381};
+
+// LIGHT 2
 
 float3 light2_pos : POSITION
 <
@@ -135,6 +145,10 @@ float4x4 ViewInverseXf : ViewInverse;
 float4x4 WorldITXf : WorldInverseTranspose < string UIWidget="none";>;
 float4x4 ViewITXf : ViewInverseTranspose < string UIWidget="none";>;
 
+// ######################################################################
+// INPUT STRUCTURES.
+// ######################################################################
+
 //
 // This is Maya's derp structure, it feeds the vertex shader with this.
 //
@@ -161,13 +175,27 @@ struct vertex_out
 	float3x3 tangent_transform;
 };
 
-float get_lambert(float3 light_dir, float3 normal)
+// ######################################################################
+// HELPER FUNCS.
+// ######################################################################
+
+// Schlick's Approximation (WIP)
+//float get_fresnel(float refindex, float3 light_dir, float3 view_dir)
+//{
+//	float f0 = pow((1 - refindex) / (1 + refindex), 2);
+//
+//	return f0 + (1 - f0) * pow(1 - dot(light_dir, dot(light_dir, v) / 2)), 5);
+//}
+
+// Calculates a lambert term.
+inline float lambert(float3 l_dir, float3 normal)
 {
-	float l = dot(light_dir, normal);
+	float l = dot(l_dir, normal);
 	return max(l, 0);
 }
 
-float3 get_light_dir(float3 pos, float3 l_pos)
+// Finds the unit direction of l_pos from pos.
+inline float3 direction(float3 pos, float3 l_pos)
 {
 	return normalize(l_pos - pos);
 }
@@ -228,43 +256,46 @@ float3 calculate_spec(float3 light_dir, float3 normal, float3 camera_dir, float2
 
 float4 fragment_f(vertex_out IN) : COLOR 
 {
-	float3 normal;	
+	float3 tspos = mul(IN.tangent_transform, IN.os_pos);
+	float3 light1_tspos = mul(IN.tangent_transform, light1_pos);
+	float3 light2_tspos = mul(IN.tangent_transform, light2_pos);
+	float3 camera_tsdir = mul(IN.tangent_transform, IN.camera_dir);
+
+	float3 normal = mul(IN.tangent_transform, IN.normal);
 	float3 mapped_normal = 
 		lerp(
 			float4(-1.0), 
 			float4( 1.0), 
 			tex2D(normalmap_tex_sampler, IN.texCoord0));
 
-	float3 light1_dir_tspace = mul(IN.tangent_transform, get_light_dir(IN.os_pos, light1_pos));
-	float3 light2_dir_tspace = mul(IN.tangent_transform, get_light_dir(IN.os_pos, light2_pos));
-
-	float3 camera_dir_tspace = mul(IN.tangent_transform, IN.camera_dir);
+	float3 light1_tsdir = direction(tspos, light1_tspos);
+	float3 light2_tsdir = direction(tspos, light2_tspos);	
 	
-	if (mapped_normal.x == 1.0 && mapped_normal.y == 1.0 && mapped_normal.z == 1.0) 
+	if (mapped_normal.x != 1.0 && mapped_normal.y != 1.0 && mapped_normal.z != 1.0) 
 	// mostly true if no nmap assigned.
-	{
-		normal = mul(IN.tangent_transform, IN.normal);
-	}
-	else
 	{
 		normal = mapped_normal.xyz;
 	}
 
 	float3 diff_term = calculate_diffuse(
 		float2(
-			get_lambert(
-				light1_dir_tspace, 
+			lambert(
+				light1_tsdir, 
 				normal),
-			get_lambert(
-				light2_dir_tspace, 
+			lambert(
+				light2_tsdir, 
 				normal)
 		),
 		IN.texCoord0);
 
-	float3 spec_term = calculate_spec(light1_dir_tspace, normal, camera_dir_tspace, IN.texCoord0);
+	float3 spec_term = calculate_spec(light1_tsdir, normal, camera_tsdir, IN.texCoord0);
 	
 	return saturate(float4(diff_term + spec_term, 1)); 
 }
+
+// ######################################################################
+// TECHNIQUES.
+// ######################################################################
 
 technique main {
 	pass p0 {
