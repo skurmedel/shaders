@@ -244,14 +244,14 @@ float3 calculate_diffuse(float2 lamb_term, float2 texCoord)
 }
 
 // Calculates a Phong specular term.
-float3 calculate_spec(float3 light_dir, float3 normal, float3 camera_dir, float2 texCoord)
+float3 calculate_spec(float3 light_dir, float3 light_col, float3 normal, float3 camera_dir, float2 texCoord)
 {
 	float3 light_reflect = reflect(light_dir, normal);
 	// We use max here to remove highlights for surface points pointing away from the light.
 	float light_to_camera_ang = max(dot(light_reflect, camera_dir), 0);
 
 	// Technically, the light has a specular term too, but we don't care.
-	return pow(light_to_camera_ang, spec_exponent) * tex2D(spec_tex_sampler, texCoord);
+	return pow(light_to_camera_ang, spec_exponent) * tex2D(spec_tex_sampler, texCoord) * light_col;
 }
 
 float4 fragment_f(vertex_out IN) : COLOR 
@@ -289,9 +289,10 @@ float4 fragment_f(vertex_out IN) : COLOR
 		),
 		IN.texCoord0);
 
-	float3 spec_term = calculate_spec(light1_tsdir, normal, camera_tsdir, IN.texCoord0);
+	float3 spec_term1 = calculate_spec(light1_tsdir, light1_color, normal, camera_tsdir, IN.texCoord0);
+	float3 spec_term2 = calculate_spec(light2_tsdir, light2_color, normal, camera_tsdir, IN.texCoord0);
 	
-	return saturate(float4(diff_term + spec_term, 1)); 
+	return saturate(float4(diff_term + spec_term1 + spec_term2, 1)); 
 }
 
 // ######################################################################
