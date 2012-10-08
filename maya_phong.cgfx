@@ -275,6 +275,8 @@ float3 phong(float3 light_dir, float3 light_col, float3 normal, float3 camera_di
 
 float4 fragment_f(vertex_out IN) : COLOR 
 {
+	// ospos is interpolated by the GPU here between the vertices,
+	// so we must do the transform in the fragment shader.
 	float3 tspos = mul(IN.tangent_transform, IN.ospos);
 
 	float3 light1_tspos = mul(IN.tangent_transform, light1_pos);
@@ -324,6 +326,7 @@ technique main {
 		VertexProgram = compile vs_3_0 shadow_vsp();
 		DepthTestEnable = true;
 		DepthMask = true;
+		DepthWriteEnable = true;
 	}
 	pass p1 {
 		VertexProgram = compile vs_3_0 vertex_f();
