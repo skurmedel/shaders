@@ -228,7 +228,7 @@ float3 calculate_light_contrib(float lamb_term, float3 diffuse_map_term, float3 
 	return (float3(lamb_term, lamb_term, lamb_term) * light_color.xyz) * diffuse_map_term;
 }
 
-float3 calculate_diffuse(float2 lamb_term, float2 texCoord)
+float3 diffuse(float2 lamb_term, float2 texCoord)
 {
 	// Add the ambient term here, might not be strictly kosher but
 	// gives a better looking ambient where the diffuse texture 
@@ -244,7 +244,7 @@ float3 calculate_diffuse(float2 lamb_term, float2 texCoord)
 }
 
 // Calculates a Phong specular term.
-float3 calculate_spec(float3 light_dir, float3 light_col, float3 normal, float3 camera_dir, float2 texCoord)
+float3 phong(float3 light_dir, float3 light_col, float3 normal, float3 camera_dir, float2 texCoord)
 {
 	float3 light_reflect = reflect(light_dir, normal);
 	// We use max here to remove highlights for surface points pointing away from the light.
@@ -278,7 +278,7 @@ float4 fragment_f(vertex_out IN) : COLOR
 		normal = mapped_normal.xyz;
 	}
 
-	float3 diff_term = calculate_diffuse(
+	float3 diff_term = diffuse(
 		float2(
 			lambert(
 				light1_tsdir, 
@@ -289,8 +289,8 @@ float4 fragment_f(vertex_out IN) : COLOR
 		),
 		IN.texCoord0);
 
-	float3 spec_term1 = calculate_spec(light1_tsdir, light1_color, normal, camera_tsdir, IN.texCoord0);
-	float3 spec_term2 = calculate_spec(light2_tsdir, light2_color, normal, camera_tsdir, IN.texCoord0);
+	float3 spec_term1 = phong(light1_tsdir, light1_color, normal, camera_tsdir, IN.texCoord0);
+	float3 spec_term2 = phong(light2_tsdir, light2_color, normal, camera_tsdir, IN.texCoord0);
 	
 	return saturate(float4(diff_term + spec_term1 + spec_term2, 1)); 
 }
