@@ -53,7 +53,7 @@ texture diffuse_tex
 	string UIName =  "Diffuse Texture";
 >;
 
-texture normalmap_tex
+texture normalmap_tex : NormalTexture
 <
 	string ResourceType = "2D";
 	string UIName =  "Normal Map Texture";
@@ -191,18 +191,6 @@ inline float3 direction(float3 pos, float3 l_pos)
 // PASS 1.
 // ######################################################################
 
-struct shadow_vsp_out
-{
-	float4 position		: POSITION;
-	float2 texCoord0 	: TEXCOORD0;
-
-	float depth 		: DEPTH;
-};
-
-// ######################################################################
-// PASS 2.
-// ######################################################################
-
 struct vertex_out
 {
 	// Clip-space.
@@ -313,7 +301,7 @@ float4 fragment_f(vertex_out IN) : COLOR
 
 	float3 spec_term1 = phong(light1_tsdir, light1_color, normal, IN.camera_tsdir, IN.texCoord0);
 	float3 spec_term2 = phong(light2_tsdir, light2_color, normal, IN.camera_tsdir, IN.texCoord0);
-	
+
 	return saturate(float4(diff_term + spec_term1 + spec_term2, 1)); 
 }
 
@@ -322,18 +310,14 @@ float4 fragment_f(vertex_out IN) : COLOR
 // ######################################################################
 
 technique main {
-	pass p0 {
-		VertexProgram = compile vs_3_0 shadow_vsp();
-		DepthTestEnable = true;
-		DepthMask = true;
-		DepthWriteEnable = true;
-	}
 	pass p1 {
 		VertexProgram = compile vs_3_0 vertex_f();
 		DepthTestEnable = true;
 		DepthMask = true;
-		CullFaceEnable = false;
+		CullFaceEnable = False;
+        CullFace = Back;
 		AlphaBlendEnable = true;
 		FragmentProgram = compile ps_3_0 fragment_f();
+
 	}
 }
