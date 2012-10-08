@@ -67,7 +67,7 @@ texture specular_tex
 
 // LIGHT 1
 
-float3 light1_pos : POSITION
+float3 light1_pos : Position
 <
 	string UIHelp = "Light 1 Position";
 > = {250, 250, -70};
@@ -161,19 +161,6 @@ struct appdata
 	float3 binormal 	: TEXCOORD2;
 };
 
-struct vertex_out
-{
-	// Clip-space.
-	float4 position 	: POSITION;
-	float2 texCoord0	: TEXCOORD0;
-	// These are in object space.
-	float3 os_pos;
-	float3 camera_dir;
-	float3 normal;
-
-	// Transforms object -> tangent space.
-	float3x3 tangent_transform;
-};
 
 // ######################################################################
 // HELPER FUNCS.
@@ -200,25 +187,57 @@ inline float3 direction(float3 pos, float3 l_pos)
 	return normalize(l_pos - pos);
 }
 
+// ######################################################################
+// PASS 1.
+// ######################################################################
+
+struct shadow_vsp_out
+{
+	float4 position		: POSITION;
+	float2 texCoord0 	: TEXCOORD0;
+
+	float depth 		: DEPTH;
+};
+
+// ######################################################################
+// PASS 2.
+// ######################################################################
+
+struct vertex_out
+{
+	// Clip-space.
+	float4 position 	: POSITION;
+	float2 texCoord0	: TEXCOORD0;
+	// These are in object space.
+	float3 ospos;
+	// Tangent space.
+	float3 camera_tsdir;
+	float3 normal;
+
+	// Transforms object -> tangent space.
+	float3x3 tangent_transform;
+};
+
 vertex_out vertex_f(appdata IN)
 {
 	vertex_out OUT;
 
 	OUT.position = mul(WorldViewProjXf, float4(IN.position, 1));
-	OUT.os_pos = IN.position.xyz;
 
-	OUT.texCoord0 = IN.texCoord0;
-	
-	OUT.camera_dir = normalize(mul(WorldViewProjInverseXf, float4(0, 0, 1, 1))).xyz;
-
-	OUT.normal = IN.normal.xyz;
-	
 	OUT.tangent_transform = 
 	float3x3(
 		IN.tangent.xyz, 
 		flip_y_normal? -IN.binormal.xyz : IN.binormal.xyz, 
 		IN.normal.xyz
 	);
+
+	OUT.ospos = IN.position.xyz;
+	OUT.texCoord0 = IN.texCoord0;
+	
+	OUT.camera_tsdir = normalize(mul(WorldViewProjInverseXf, float4(0, 0, 1, 1))).xyz;
+	OUT.camera_tsdir = mul(OUT.tangent_transform, OUT.camera_tsdir);
+
+	OUT.normal = mul(OUT.tangent_transform, IN.normal.xyz);
 
 	return OUT;
 }
@@ -256,12 +275,13 @@ float3 phong(float3 light_dir, float3 light_col, float3 normal, float3 camera_di
 
 float4 fragment_f(vertex_out IN) : COLOR 
 {
-	float3 tspos = mul(IN.tangent_transform, IN.os_pos);
+	float3 tspos = mul(IN.tangent_transform, IN.ospos);
+
 	float3 light1_tspos = mul(IN.tangent_transform, light1_pos);
 	float3 light2_tspos = mul(IN.tangent_transform, light2_pos);
-	float3 camera_tsdir = mul(IN.tangent_transform, IN.camera_dir);
 
-	float3 normal = mul(IN.tangent_transform, IN.normal);
+	float3 normal = IN.normal;
+
 	// Todo: might be more efficient as tex2D(normalmap_tex_sampler, IN.texCoord0) * 2 - 1
 	float3 mapped_normal = 
 		lerp(
@@ -289,8 +309,8 @@ float4 fragment_f(vertex_out IN) : COLOR
 		),
 		IN.texCoord0);
 
-	float3 spec_term1 = phong(light1_tsdir, light1_color, normal, camera_tsdir, IN.texCoord0);
-	float3 spec_term2 = phong(light2_tsdir, light2_color, normal, camera_tsdir, IN.texCoord0);
+	float3 spec_term1 = phong(light1_tsdir, light1_color, normal, IN.camera_tsdir, IN.texCoord0);
+	float3 spec_term2 = phong(light2_tsdir, light2_color, normal, IN.camera_tsdir, IN.texCoord0);
 	
 	return saturate(float4(diff_term + spec_term1 + spec_term2, 1)); 
 }
@@ -301,10 +321,16 @@ float4 fragment_f(vertex_out IN) : COLOR
 
 technique main {
 	pass p0 {
+		VertexProgram = compile vs_3_0 shadow_vsp();
+		DepthTestEnable = true;
+		DepthMask = true;
+	}
+	pass p1 {
 		VertexProgram = compile vs_3_0 vertex_f();
 		DepthTestEnable = true;
 		DepthMask = true;
 		CullFaceEnable = false;
+		AlphaBlendEnable = true;
 		FragmentProgram = compile ps_3_0 fragment_f();
 	}
 }
