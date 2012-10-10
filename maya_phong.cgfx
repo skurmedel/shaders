@@ -39,14 +39,6 @@ float3 ambient : DIFFUSE
 	string UIHelp = "Ambient";
 > = {0.0, 0.0, 0.0};
 
-float spec_exponent
-<
-	string UIHelp = "Specular Exponent";
-	string UIWidget = "Slider";
-	float UIMin = 0.1;
-	float UIMax = 250;
-> = 1;
-
 texture diffuse_tex
 <
 	string ResourceType = "2D";
@@ -63,6 +55,24 @@ texture specular_tex
 <
 	string ResourceType = "2D";
 	string UIName =  "Normal Map Texture";
+>;
+
+texture gloss_tex
+<
+	string ResourceType = "2D";
+	string UIName = "Gloss Map Texture";
+>;
+
+texture emissive_tex
+<
+	string ResourceType = "2D";
+	string UIName = "Emissive Map Texture";
+>;
+
+texture alpha_tex
+<
+	string ResourceType = "2D";
+	string UIName = "Alpha Map";
 >;
 
 // LIGHT 1
@@ -120,13 +130,54 @@ bool flip_y_normal
 	string UIHelp = "Flip Y Normal (UDK, CryEngine etc.)";
 > = false;
 
-sampler2D spec_tex_sampler
+sampler2D specular_tex_sampler
 <
 	string UIName = "Specular Map";
 > =
 	sampler_state  
 	{
 		Texture = <specular_tex>;
+		MinFilter = LinearMipMapLinear;
+		MagFilter = Linear;
+	};
+
+float gloss_multiplier
+<
+	string UIHelp = "Spec. Exponent scale";
+	string UIWidget = "Slider";
+	float UIMin = 0.01;
+	float UIMax = 1.0;
+> = 1;
+
+sampler2D gloss_tex_sampler
+<
+	string UIName = "Gloss Map";
+> =
+	sampler_state  
+	{
+		Texture = <gloss_tex>;
+		MinFilter = LinearMipMapLinear;
+		MagFilter = Linear;
+	};
+
+sampler2D emissive_tex_sampler
+<
+	string UIName = "Emissive Map";
+> =
+	sampler_state 
+	{
+		Texture = <emissive_tex>;
+		MinFilter = LinearMipMapLinear;
+		MagFilter = Linear;
+	};
+
+sampler2D alpha_tex_sampler
+<
+	string UIName = "Alpha Map";
+> =
+	sampler_state 
+	{
+		Texture = <alpha_tex>;
 		MinFilter = LinearMipMapLinear;
 		MagFilter = Linear;
 	};
@@ -144,6 +195,13 @@ float4x4 ViewInverseXf : ViewInverse;
 
 float4x4 WorldITXf : WorldInverseTranspose < string UIWidget="none";>;
 float4x4 ViewITXf : ViewInverseTranspose < string UIWidget="none";>;
+
+// These control how the gloss map is interpreted. The gloss map is 
+// averaged between the three channels and scaled to [0.0, 1.0]. The 
+// result is used to interpolate between these extremes.
+
+#define GLOSS_MIN_EXPONENT 1
+#define GLOSS_MAX_EXPONENT 200
 
 // ######################################################################
 // INPUT STRUCTURES.
@@ -232,7 +290,7 @@ vertex_out vertex_f(appdata IN)
 
 float3 calculate_light_contrib(float lamb_term, float3 diffuse_map_term, float3 light_color)
 {
-	return (float3(lamb_term, lamb_term, lamb_term) * light_color.xyz) * diffuse_map_term;
+	return (float3(lamb_term) * light_color.xyz) * diffuse_map_term;
 }
 
 float3 diffuse(float2 lamb_term, float2 texCoord)
@@ -240,14 +298,20 @@ float3 diffuse(float2 lamb_term, float2 texCoord)
 	// Add the ambient term here, might not be strictly kosher but
 	// gives a better looking ambient where the diffuse texture 
 	// contributes.
-	float3 diffuse_map_term = tex2D(diffuse_tex_sampler, texCoord).xyz;
+	float3 diffuse_map_term = tex2D(diffuse_tex_sampler, texCoord);
 
 	// light 1
-	float3 light_contrib = calculate_light_contrib(lamb_term.x, diffuse_map_term, light1_color);
+	float3 light_contrib = calculate_light_contrib(lamb_term.x, diffuse_map_term.rgb, light1_color);
 	// light 2
 	light_contrib += calculate_light_contrib(lamb_term.y, diffuse_map_term, light2_color);
 
-	return light_contrib + (ambient * diffuse_map_term);
+	float4 emissive = tex2D(emissive_tex_sampler, texCoord);
+	if (emissive.r == 1.0 && emissive.g == 1.0 && emissive.b == 1.0 && emissive.a == 1.0)
+	{
+		emissive.a = 0.0;
+	}
+
+	return (emissive.a * emissive.rgb) + light_contrib + (ambient *  diffuse_map_term.rgb);
 }
 
 // Calculates a Phong specular term.
@@ -257,8 +321,11 @@ float3 phong(float3 light_dir, float3 light_col, float3 normal, float3 camera_di
 	// We use max here to remove highlights for surface points pointing away from the light.
 	float light_to_camera_ang = max(dot(light_reflect, camera_dir), 0);
 
+	float exponent = lerp(GLOSS_MIN_EXPONENT, GLOSS_MAX_EXPONENT, tex2D(gloss_tex_sampler, texCoord).r);
+	exponent *= gloss_multiplier;
+
 	// Technically, the light has a specular term too, but we don't care.
-	return pow(light_to_camera_ang, spec_exponent) * tex2D(spec_tex_sampler, texCoord) * light_col;
+	return pow(light_to_camera_ang, exponent) * tex2D(specular_tex_sampler, texCoord) * light_col;
 }
 
 float4 fragment_f(vertex_out IN) : COLOR 
@@ -302,7 +369,9 @@ float4 fragment_f(vertex_out IN) : COLOR
 	float3 spec_term1 = phong(light1_tsdir, light1_color, normal, IN.camera_tsdir, IN.texCoord0);
 	float3 spec_term2 = phong(light2_tsdir, light2_color, normal, IN.camera_tsdir, IN.texCoord0);
 
-	return saturate(float4(diff_term + spec_term1 + spec_term2, 1)); 
+	float4 alpha = tex2D(alpha_tex_sampler, IN.texCoord0);
+
+	return saturate(float4(diff_term + spec_term1 + spec_term2, alpha.r));
 }
 
 // ######################################################################
@@ -316,8 +385,12 @@ technique main {
 		DepthMask = true;
 		CullFaceEnable = False;
         CullFace = Back;
-		AlphaBlendEnable = true;
 		FragmentProgram = compile ps_3_0 fragment_f();
 
+		BlendEnable = true;
+		BlendFunc = int2(SrcAlpha, OneMinusSrcAlpha);
+		BlendFuncSeparate = int4( SrcAlpha, OneMinusSrcAlpha, One, OneMinusSrcAlpha);
+		BlendEquationSeparate = int2( Add, Add );
+		BlendColor = float4(1.0f,1.0f,1.0f,1.0f);
 	}
 }
