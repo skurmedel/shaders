@@ -36,6 +36,8 @@
         GAMMA_CORRECT_NO_SRGB_SUPPORT
         GAMMA_CORRECT_NO_REC709_SUPPORT
         GAMMA_CORRECT_NO_REC2020_SUPPORT
+    There's also GAMMA_CORRECT_ONLY_SRGB_SUPPORT that is effectively ifdefing 
+    out all the other standards.
 */
 
 #ifndef GAMMA_CORRECT_NO_SRGB_SUPPORT
@@ -95,7 +97,8 @@ vec3 srgb_gamma_correct(in vec3 rgb)
 }
 #endif
 
-#ifdef GAMMA_CORRECT_NO_REC709_SUPPORT
+#ifndef GAMMA_CORRECT_ONLY_SRGB_SUPPORT
+#ifndef GAMMA_CORRECT_NO_REC709_SUPPORT
 /*
     Takes an Rec.709 gamma correct value and linearizes it.
 
@@ -149,7 +152,9 @@ vec3 rec709_gamma_correct(in vec3 rgb)
 
     return ret;
 }
-#endif
+#endif // ifndef GAMMA_CORRECT_NO_REC709_SUPPORT
+
+#endif // ifndef GAMMA_CORRECT_ONLY_SRGB_SUPPORT
 
 /*   Copyright (c) 2016 Simon Otter
 
