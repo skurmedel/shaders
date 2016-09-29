@@ -1,5 +1,4 @@
-GLSL shaders
-------------
+# GLSL shaders
 
 This is a collection of pure GLSL shaders and functions I've written.
 

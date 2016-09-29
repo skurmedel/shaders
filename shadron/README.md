@@ -1,5 +1,4 @@
-Shadron shaders
----------------
+# Shadron shaders
 
 Shaders written for the program Shadron.
 
