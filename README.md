@@ -3,20 +3,12 @@ shaders
 
 Shaders for various 3D-applications.
 
-## maya_phong.cgfx
+## GLSL
 
-![Example screenshot](shaders/blob/master/maya_phong_example.png)
+Check out the GLSL readme for more info. Has a bunch of decently useful general
+purpose "libraries".
 
-This is a Maya CGFX viewport shader. Currently it implements the Phong-Lambert shading model.
+## Shadron
 
- - Phong shading
- - Diffuse texture mapping
- - Normal mapping
+GLSL shaders written for the Shadron program.
 
-### How to use
-
-Load the `cgfxShader.mll` plugin in Maya. Assign the object a new cgfxShader and point the CgFX File field to `maya_pong.cgfx`.
-
-Tune the specular exponent, create a locator and assign its name to the Light Position attribute. You can also assign a diffuse texture with the corresponding attribute. Procedural textures will not work.
-
-The normal map attribute accepts a file texture to a tangent space normal map.
