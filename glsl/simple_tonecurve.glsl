@@ -1,4 +1,14 @@
 /*
+################################################################################
+    NOTE: WHEN USING THESE ROUTINES, IT ASSUMED YOU ARE IN LINEAR SPACE.
+          USE THE ROUTINES IN gamma_correct.glsl IF YOU NEED.
+
+          CALCULATING THE LUMINOSITY IN GAMMA CORRECTED SPACE WILL NOT GIVE THE
+          CORRECT RESULTS (ESPECIALLY FOR DARK BLUES ETC.) 
+################################################################################
+*/
+
+/*
     This function is the single channel response.
 
     It is a piecewise function of two degree 3 polynomials.
@@ -42,9 +52,6 @@ float simple_tonecurve_ch(in float x, in float l, in float m, in float h)
 
     If you want almost the same behaviour as PS', just clamp the result between
     vec3(0) and vec3(1). 
-
-    NOTE: THIS FUNCTION SHOULD BE APPLIED TO A LINEAR SPACE FOR CORRECT RESULTS.
-          MAKE SURE YOUR WORKFLOW IS GAMMA CORRECT.
 */
 vec3 simple_tonecurve_rgb(in vec3 rgb, in float low, in float mid, in float high)
 {
@@ -59,9 +66,6 @@ vec3 simple_tonecurve_rgb(in vec3 rgb, in float low, in float mid, in float high
     This is the per channel version of simple_tonecurve_rgb. 
 
     It works the same but each colour channel has an independent control curve.
-
-    NOTE: THIS FUNCTION SHOULD BE APPLIED TO A LINEAR SPACE FOR CORRECT RESULTS.
-          MAKE SURE YOUR WORKFLOW IS GAMMA CORRECT.
 */ 
 vec3 simple_tonecurve(in vec3 rgb, in vec3 low, in vec3 mid, in vec3 high)
 {
