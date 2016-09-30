@@ -115,7 +115,7 @@ vec3 rec709_gamma_linearize(in vec3 rgb)
 #define REC709_TRANSFORM_CH(v, x) {\
         float selector = step(0.081, x);\
         v = (1 - selector) * (x / 4.5)\
-          + (    selector) * pow((v + 0.099) / 1.099, 1.0/0.45); }
+          + (    selector) * pow((x + 0.099) / 1.099, 1.0/0.45); }
 
     vec3 ret = vec3(0);
     REC709_TRANSFORM_CH(ret.r, rgb.r);
