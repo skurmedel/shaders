@@ -106,7 +106,7 @@ vec3 srgb_gamma_correct(in vec3 rgb)
     it uses two parts, one linear close to black. It is pretty similar to the 
     one in sRGB but not on a negligeable level.
 */
-vec3 rec709_linearize(in vec3 rgb)
+vec3 rec709_gamma_linearize(in vec3 rgb)
 {
     /*
         Technically, the x / 4.5 should only happen if x is LESS THAN, but now 

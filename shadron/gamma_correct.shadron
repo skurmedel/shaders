@@ -1,0 +1,39 @@
+glsl 
+{
+    #include "../glsl/gamma_correct.glsl"
+}
+
+// The Rec.709 output will not look correct on a modern screen.
+
+// 0: linear
+// 1: sRGB
+// 2: Rec.709
+parameter int   shade_in     = 5 : range(0, 255);
+parameter int   target_shade = 23: range(0, 255);
+parameter int   standard_in  = 0 : range(0, 2);
+parameter int   standard_out = 2 : range(1, 2);
+parameter float f_epsilon    = 0.0019 : range(0.000001, 0.1);
+
+glsl vec3 map_pixels(vec2 pos)
+{
+    vec3 col_in = vec3((float(shade_in)) / 255.0);
+    if (standard_in == 1)
+        col_in = srgb_gamma_linearize(col_in);
+    if (standard_in == 2)
+        col_in = rec709_gamma_linearize(col_in);
+    
+    vec3 col_out = col_in;
+    if (standard_out == 1)
+        col_out = srgb_gamma_correct(col_out);
+    else
+        col_out = rec709_gamma_correct(col_out);
+
+    if (abs(col_out.r - (float(target_shade)) / 255.0) < f_epsilon)
+        return vec3(1, 0, 0);
+    else
+        return vec3(0);
+    
+    return col_out;
+}
+
+image img_out = glsl(map_pixels, vec2(128,128));
