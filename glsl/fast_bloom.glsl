@@ -3,10 +3,11 @@
 
     Bloom originally refers to halo effects around highlights on film.
 
+    If FAST_BLOOM_LUMA_FUNCTION is not defined, luma.glsl is a dependency for 
+    this file.
+
     As is often the case, the effect is best done in linear space.
 */
-
-#include "luma.glsl"
 
 /*
     A function used to sample a texture. By default it is just bound to 
@@ -20,6 +21,8 @@
 #endif
 
 #ifndef FAST_BLOOM_LUMA_FUNCTION
+// We use luma.glsl here if the user doesn't provide their own.
+#include "luma.glsl"
 #define FAST_BLOOM_LUMA_FUNCTION(rgb)                srgb_luma(rgb)
 #endif  
 
