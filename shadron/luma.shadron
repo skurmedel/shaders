@@ -1,0 +1,23 @@
+glsl 
+{
+    #include "../glsl/luma.glsl"
+    #include "../glsl/gamma_correct.glsl"
+}
+
+parameter float saturation    = 1.0 : range(0, 2);
+parameter int   gamma_correct = 1 : range(0, 1);
+
+image img_in = input() : map(clamp);
+
+glsl vec3 map_pixels(vec2 pos)
+{
+    vec3 col_in = texture(img_in, pos).rgb;
+    if (gamma_correct == 1)
+        col_in = srgb_gamma_linearize(col_in);
+    vec3 col_out = srgb_saturation(col_in, saturation);
+    if (gamma_correct == 1)
+        col_out = srgb_gamma_correct(clamp(col_out, vec3(0), vec3(1)));
+    return col_out;
+}
+
+image img_out = glsl(map_pixels, sizeof(img_in));
