@@ -1,10 +1,7 @@
 /*
 ################################################################################
-    NOTE: WHEN USING THESE ROUTINES, IT ASSUMED YOU ARE IN LINEAR SPACE.
+    NOTE: WHEN USING THESE ROUTINES, IT BEST IF YOU ARE IN LINEAR SPACE.
           USE THE ROUTINES IN gamma_correct.glsl IF YOU NEED.
-
-          CALCULATING THE LUMINOSITY IN GAMMA CORRECTED SPACE WILL NOT GIVE THE
-          CORRECT RESULTS (ESPECIALLY FOR DARK BLUES ETC.) 
 ################################################################################
 */
 
