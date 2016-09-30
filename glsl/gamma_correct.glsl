@@ -95,7 +95,7 @@ vec3 srgb_gamma_correct(in vec3 rgb)
 
     return ret;
 }
-#endif
+#endif // GAMMA_CORRECT_NO_SRGB_SUPPORT
 
 #ifndef GAMMA_CORRECT_ONLY_SRGB_SUPPORT
 #ifndef GAMMA_CORRECT_NO_REC709_SUPPORT
@@ -112,8 +112,8 @@ vec3 rec709_linearize(in vec3 rgb)
         Technically, the x / 4.5 should only happen if x is LESS THAN, but now 
         it's LESS THAN OR EQUAL... which isn't 100% true to the standard.
     */ 
-    #define REC709_TRANSFORM_CH(v, x) {\
-        float selector = step(0.081, x);
+#define REC709_TRANSFORM_CH(v, x) {\
+        float selector = step(0.081, x);\
         v = (1 - selector) * (x / 4.5)\
           + (    selector) * pow((v + 0.099) / 1.099, 1.0/0.45); }
 
@@ -122,7 +122,7 @@ vec3 rec709_linearize(in vec3 rgb)
     REC709_TRANSFORM_CH(ret.g, rgb.g);
     REC709_TRANSFORM_CH(ret.b, rgb.b);
 
-    #undef REC709_TRANSFORM_CH
+#undef REC709_TRANSFORM_CH
 
     return ret;
 }
@@ -138,8 +138,8 @@ vec3 rec709_gamma_correct(in vec3 rgb)
         Technically, the first part should only happen if x is LESS THAN, but 
         now it's LESS THAN OR EQUAL... which isn't 100% true to the standard.
     */ 
-    #define REC709_TRANSFORM_CH(v, x) {\
-        float selector = step(0.018, x);
+#define REC709_TRANSFORM_CH(v, x) {\
+        float selector = step(0.018, x);\
         v = (1 - selector) * (4.5 * x)\
           + (    selector) * (1.099 * pow(x, 0.45) - 0.099); }
 
@@ -148,13 +148,13 @@ vec3 rec709_gamma_correct(in vec3 rgb)
     REC709_TRANSFORM_CH(ret.g, rgb.g);
     REC709_TRANSFORM_CH(ret.b, rgb.b);
 
-    #undef REC709_TRANSFORM_CH
+#undef REC709_TRANSFORM_CH
 
     return ret;
 }
-#endif // ifndef GAMMA_CORRECT_NO_REC709_SUPPORT
 
-#endif // ifndef GAMMA_CORRECT_ONLY_SRGB_SUPPORT
+#endif // GAMMA_CORRECT_NO_REC709_SUPPORT
+#endif // GAMMA_CORRECT_ONLY_SRGB_SUPPORT
 
 /*   Copyright (c) 2016 Simon Otter
 
