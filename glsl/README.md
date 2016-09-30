@@ -12,6 +12,7 @@ A significant chunk are "general purpose" functions that are commonly used.
 | luma.glsl             | sRGB, Rec.709 luminosity approximations.                 | Colour Spaces |
 | hsv.glsl *(TBD)*      | hsv-rgb, rgb-hsv functions, for HSV colour space         | Colour Spaces |
 | simple_tonecurve.glsl | A fix. 3 point tonecurve, for simple colour correction   | Grading       |
+| fast_bloom.glsl       | A very quick and dirty bloom function, when speed is king| Effect        |
 
 ## Specific stuff (in order of "cool")
 
