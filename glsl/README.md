@@ -6,13 +6,13 @@ A significant chunk are "general purpose" functions that are commonly used.
 
 ## General purpose files (in some order of usefulness)
 
-| Name                  | Description                                              | Category      |
-|-----------------------|----------------------------------------------------------|---------------|
-| gamma_correct.glsl    | sRGB, Rec.709, Rec.2020 transfer functions.              | Colour Spaces |
-| luma.glsl             | sRGB, Rec.709 luminosity approximations.                 | Colour Spaces |
-| hsv.glsl *(TBD)*      | hsv-rgb, rgb-hsv functions, for HSV colour space         | Colour Spaces |
-| simple_tonecurve.glsl | A fix. 3 point tonecurve, for simple colour correction   | Grading       |
-| fast_bloom.glsl       | A very quick and dirty bloom function, when speed is king| Effect        |
+|Name                    |Description                                              |Category       |
+|------------------------|---------------------------------------------------------|---------------|
+|gamma_correct.glsl      |sRGB, Rec.709, Rec.2020 transfer functions.              |Colour Spaces  |
+|luma.glsl               |sRGB, Rec.709 luminosity approximations.                 |Colour Spaces  |
+|hsv.glsl *(TBD)*        |hsv-rgb, rgb-hsv functions, for HSV colour space         |Colour Spaces  |
+|simple_tonecurve.glsl   |A fix. 3 point tonecurve, for simple colour correction   |Grading        |
+|fast_mipmap_bloom.glsl  |A very simple bloom function for mipmapped images        |Effect         |
 
 ## Specific stuff (in order of "cool")
 
