@@ -25,7 +25,7 @@ The files themselves are pretty well documented but web docs are planned.
 ## Headers?
 The current idea is that a file can be dropped into most projects without 
 problems. So I omitted headers as many people just compile their shaders as a 
-big blob even though OpenGL has support for it.
+big blob even though some has OpenGL wrappers with support for it.
 
 ## License
 All the .glsl-files are **MIT-licensed**.
