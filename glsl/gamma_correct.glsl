@@ -3,14 +3,14 @@
 
     The following standards are supported:
 
-        - "sRGB"        IEC 61966-2-1:1999     
+    - "sRGB"        IEC 61966-2-1:1999     
                         Most computer screens use this transfer function. If you
                         are making a PC game, you want these. 
     
-        - "Rec.709"     ITU-R Recommendation BT.709
+    - "Rec.709"     ITU-R Recommendation BT.709
                         HDTV's, etc.
     
-        - "Rec.2020"    ITU-R Recommendation BT.2020
+    - "Rec.2020"    ITU-R Recommendation BT.2020
                         4K, 8K, UHDT. This function is very similar to Rec.709
                         but we support additional control for 10 and 12 bit 
                         systems as recommended by the standard (overkill? yes.)
@@ -33,10 +33,12 @@
     For neat freaks the following defines can be used to remove functionality 
     not desired in the final compilation (although the compiler probably will
     optimise it away anyhow):
-        GAMMA_CORRECT_NO_SRGB_SUPPORT
-        GAMMA_CORRECT_NO_REC709_SUPPORT
-        GAMMA_CORRECT_NO_REC2020_SUPPORT
-    There's also GAMMA_CORRECT_ONLY_SRGB_SUPPORT that is effectively ifdefing 
+
+    - GAMMA_CORRECT_NO_SRGB_SUPPORT
+    - GAMMA_CORRECT_NO_REC709_SUPPORT
+    - GAMMA_CORRECT_NO_REC2020_SUPPORT
+    
+    There's also `GAMMA_CORRECT_ONLY_SRGB_SUPPORT` that is effectively ifdefing 
     out all the other standards.
 */
 
@@ -44,7 +46,7 @@
 /*
     Takes an sRGB gamma corrected triple and linearizes it.
 
-    The input is assumed to be gamma corrected with 2.2.
+    The input is assumed to be gamma corrected according to the sRGB standard.
 
     The sRGB gamma function is not just pow(x, 2.2), but instead a function that
     is linear close to black and non-linear for brighter colours.
