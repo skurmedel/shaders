@@ -1,0 +1,23 @@
+glsl 
+{
+    #define FAST_MIPMAP_BLOOM_SAMPLE_TEXTURE(tex, pos, bias)\
+        srgb_gamma_linearize(texture(tex, pos, bias).rgb)
+
+    #include "../glsl/gamma_correct.glsl"
+    #include "../glsl/fast_mipmap_bloom.glsl"
+}
+
+
+parameter float   scale     = 0.5 : range(0, 3);
+parameter float   threshold = 0.5 : range(0, 2);
+
+image img_in = file() : map(clamp), filter(trilinear);
+
+glsl vec3 map_pixels(vec2 pos)
+{
+    return srgb_gamma_correct(
+        FAST_MIPMAP_BLOOM_SAMPLE_TEXTURE(img_in, pos, 0)
+         + fast_mipmap_bloom(img_in, pos, threshold, scale));
+}
+
+image img_out = glsl(map_pixels, sizeof(img_in));
