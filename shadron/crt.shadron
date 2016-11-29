@@ -1,0 +1,119 @@
+#version 400
+
+/*
+    Emulate a bad CRT screen with an aperture grille or shadow mask.
+*/
+
+glsl 
+{
+    #include "../glsl/gamma_correct.glsl"
+}
+
+parameter int       mask_scale     = 4   : range(1, 500);
+parameter float     convergence    = 1 : range(0.0, 2.0);
+parameter float     mask_align     = 1.05 : range(-5.0, 5.0);
+parameter float     brightness_adj = 3.5 : range(1, 5);
+parameter float     lift           = 0.007 : range(0, 0.1);
+parameter vec2      convergence_sp = vec2(0.05, 0.1) : range(vec2(0.0), vec2(1.0));
+
+animation img_in = sequence("../testimgs/pulp/pulp*.png", 25) : filter(bilinear);
+
+glsl vec3 compute_aperture(vec2 curved_pos, vec2 sizes)
+{
+    vec3 aperture =  vec3(
+        cos( (sizes.y) * 2 * 3.141592 * (curved_pos.y + (0   * mask_align)/2)),
+        cos( (sizes.y) * 2 * 3.141592 * (curved_pos.y + (1.5 * mask_align)/2)),
+        cos( (sizes.y) * 2 * 3.141592 * (curved_pos.y + (3   * mask_align)/2))
+    );
+
+    return aperture * aperture;
+}
+
+glsl vec3 compute_mask(vec2 curved_pos1, vec2 input_sz)
+{
+    vec2 pa = vec2(curved_pos1.x * input_sz.x/input_sz.y, curved_pos1.y);
+
+    vec3 mask = vec3(
+        cos(mask_scale*pa.x + 0) * cos(mask_scale*pa.x + 0) + sin(mask_scale*pa.y + 0) * sin(mask_scale*pa.y + 0) < 0.5,
+        cos(mask_scale*pa.x + 3.141592/2) * cos(mask_scale*pa.x + 3.141592/2) + sin(mask_scale*pa.y + 0) * sin(mask_scale*pa.y + 0) < 0.5,
+        cos(mask_scale*pa.x + 0) * cos(mask_scale*pa.x + 0) + sin(mask_scale*pa.y + 3.141592/2) * sin(mask_scale*pa.y + 3.141592/2) < 0.5
+    );
+
+    return mask;
+}
+
+glsl vec3 integrate_mask(vec2 pixel_sz, vec2 curved_pos1, vec2 sizes)
+{
+    /*
+        Our original expression is:
+            Sy = sizes.y    Cy = curved_pos1.y    R = 0, 1.5, 3    A = mask_align
+            f(y) = cos^2(pi * Sy * (y + R * A * 1/2));
+        Now the indefinite integral of f(y) becomes:
+            (y + R * A * 1/2)/4 + sin(Sy(y + R * A * 1/2))/2
+        With a = Cy - fwidth(Cy) * 0.5 and b = Cy + fwidth(Cy) * 0.5 we can use
+        the fundamental theorem of calculus to calculate the integral between
+        a and b.
+    */
+    float Sy = sizes.y;
+    float Cy = curved_pos1.y;
+    float A  = mask_align;
+
+#define CRT_INTEGRATE_MASK_INTEGRAL(y, R)\
+    ((y + R * A * 1.0/2)/4 + sin(2 * 3.141592 * Sy*(y + (R * A)/2))/2)
+
+    float offset = pixel_sz.y * 0.5;
+    
+    return abs(vec3(
+        CRT_INTEGRATE_MASK_INTEGRAL(Cy + offset,   0) - CRT_INTEGRATE_MASK_INTEGRAL(Cy - offset,   0),
+        CRT_INTEGRATE_MASK_INTEGRAL(Cy + offset, 1.5) - CRT_INTEGRATE_MASK_INTEGRAL(Cy - offset, 1.5),
+        CRT_INTEGRATE_MASK_INTEGRAL(Cy + offset, 3.0) - CRT_INTEGRATE_MASK_INTEGRAL(Cy - offset, 3.0)
+    ));
+
+#undef CRT_INTEGRATE_MASK_INTEGRAL
+}
+
+glsl vec3 map_pixels_grille(vec2 pos)
+{
+    vec2 input_sz = sizeof(img_in);
+    vec2 pixel_sz = vec2(1.0f)/sizeof(img_in);
+    vec2 sizes = input_sz*(1.0f/mask_scale);
+
+    vec2 center = pos -vec2(0.5, 0.5);
+    float dist = length(center);
+
+    vec2 curved_pos1 = pos + center * dist * (1.0 - convergence);
+    vec2 curved_pos2 = pos + center * dist * (1.0 - convergence) * convergence_sp.r;
+    vec2 curved_pos3 = pos + center * dist * (1.0 - convergence) * convergence_sp.g;
+
+    vec3 value1 = srgb_gamma_linearize(texture(img_in, pos, 0).rgb);    
+    vec3 value2 = srgb_gamma_linearize(texture(img_in, curved_pos2, 1).rgb);    
+    vec3 value3 = srgb_gamma_linearize(texture(img_in, curved_pos3, 3).rgb);    
+
+    vec3 mask1 = vec3(0);
+    vec3 mask2 = integrate_mask(pixel_sz, curved_pos1, sizes);
+    
+    for (int j = 0; j < 6; j++)
+    {
+        for (int i = 0; i < 6; i++)
+        {
+#ifdef CRT_USE_SHADOW_MASK
+            mask1 += (1.0/36) * compute_mask(curved_pos1 + vec2(pixel_sz.x * 0.027777 * i, pixel_sz.y * 0.027777 * j), input_sz);
+#else
+            mask1 += (1.0/36) * compute_aperture(curved_pos1 + vec2(pixel_sz.x * 0.027777 * i, pixel_sz.y * 0.027777 * j), sizes);
+#endif            
+        }
+    }
+
+
+    vec3 mask = mix(mask1, mask2, pos.x > 0.5);
+
+
+    float vignetting = 1.0 - length(pos - curved_pos1);
+
+    vec3 result = clamp(vec3(value1.r, value2.g, value3.b), vec3(lift), vec3(1)) * mask * brightness_adj * vignetting;
+    return srgb_gamma_correct(result);
+}
+
+animation img_out = glsl(map_pixels_grille, sizeof(img_in));
+
+//export png_sequence(img_out, "D:\\Code\\Repos\\shaders\\testimgs\\awsdwrf\\pulp-lol?.png", 25, 4.8);
