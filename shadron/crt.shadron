@@ -22,6 +22,10 @@ animation buffer_in = sequence("../testimgs/pulp/pulp*.png", 25) : filter(biline
     change.
 */
 #define CRT_PROJECTION_RADIUS   1
+/*
+    How far the colour channels are allowed to separate in pixels.
+*/
+#define CRT_WORST_CONVERGENCE   8.0
 
 /*
     How much to blur the UV channels in the YUV processing step.
@@ -46,7 +50,7 @@ parameter float ghosting    = 0.8 : range(0, 1);
 /*
     A standard black level lift.
 */
-parameter float lift        = 0.005 : range(0, 1);
+parameter float lift        = 0.003 : range(0, 1);
 /*
     The distance of the projected screen, this affects the screen warping and
     bending. Set at 1 for a straight image.
@@ -59,7 +63,14 @@ parameter vec2  proj_scale   = vec2(0.9) : range(vec2(-2), vec2(2));
 /*
     How strong luma noise to add.
 */
-parameter float noise_scale = 0.02 : range(0, 1);
+parameter float noise_scale = 0.015 : range(0, 1);
+/*
+    How well the three colour channels converge. A value of 1 means perfectly.
+
+    The shader always have perfect "static convergence", meaning they always 
+    converge in the center of the image.
+*/
+parameter float convergence = 0.65 : range(0, 1);
 
 /*
     Converts the input to Y'UV.
@@ -83,7 +94,7 @@ glsl vec4 crt_yuv(sampler2D self, vec2 pos, float dt)
         very realistic but adds subtle plausible look.
     */
     float tracking_error = 0.015 * snoise(pos.yy * 16) * snoise(pos.yy + vec2(7 * shadron_Time));
-
+    
     /*
         Our input is sRGB, so lets linearize it (remove the gamma correction),
         first.
@@ -167,13 +178,20 @@ glsl vec4 crt_final_image(vec2 pos)
 
     /*
         We can now sample the other buffers and compose the final image.
+        
     */
 
-    vec3 dry = texture(buffer_in, pos).rgb;
-    vec3 wet =  scanline * texture(buffer_chroma_blur, projected_pos).rgb * 1.4;
+    /*
+        Sample three times, one for each colour channel and offset by convergence.
+    */
+    float r = texture(buffer_chroma_blur, projected_pos * (1 + CRT_WORST_CONVERGENCE/img_sz.x * (1.0 - convergence))).r;
+    float g = texture(buffer_chroma_blur, projected_pos).g;
+    float b = texture(buffer_chroma_blur, projected_pos * (1 + CRT_WORST_CONVERGENCE/img_sz.x * (1.0 - convergence))).b;
+    
+    vec3 wet =  scanline * vec3(r,g,b) * 1.4;
 
     return vec4(
-        mix(srgb_gamma_correct(wet), dry, pos.x >1 ), 
+        srgb_gamma_correct(wet), 
           smoothstep(1.005, 1.0, projected_pos.x) * smoothstep(1.005, 1.0, 1.0-projected_pos.x) 
         * smoothstep(1.005, 1.0, projected_pos.y) * smoothstep(1.005, 1.0, 1.0-projected_pos.y));
 }
