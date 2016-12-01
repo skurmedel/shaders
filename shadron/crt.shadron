@@ -21,7 +21,7 @@ parameter float ghosting    = 0.8 : range(0, 1);
 parameter float lift        = 0.005 : range(0, 1);
 parameter float screen_dist = 0.9 : range(0, 2);
 parameter vec2  proj_scale   = vec2(0.9) : range(vec2(-2), vec2(2));
-parameter float noise_scale = 0.015 : range(0, 1);
+parameter float noise_scale = 0.02 : range(0, 1);
 
 glsl
 {
@@ -109,13 +109,23 @@ glsl vec4 crt_yuv(sampler2D self, vec2 pos, float dt)
     */
     vec2 img_sz = sizeof(buffer_in);
     vec2 pixel_sz = 1.0/img_sz;
+    /*
+        Changing the moduli here gives a more pronounced effect but for large 
+        values it will look horrible.
+    */
     int idx = -int(pos.x * img_sz.x) % 2;
+
+    /*
+        Some tracking errors (the beam being inconsistent between scans), not 
+        very realistic but adds subtle plausible look.
+    */
+    float tracking_error = 0.015 * snoise(pos.yy * 16) * snoise(pos.yy + vec2(7 * shadron_Time));
 
     /*
         Our input is sRGB, so lets linearize it (remove the gamma correction),
         first.
     */
-    vec3 rgb = srgb_gamma_linearize(texture(buffer_in, pos + idx * vec2(pixel_sz.x, 0)).rgb);
+    vec3 rgb = srgb_gamma_linearize(texture(buffer_in, pos + idx * vec2(pixel_sz.x, 0) - vec2(0.1) * tracking_error).rgb);
 
     /*
         Rec601 luma weights. 
@@ -188,10 +198,7 @@ glsl vec4 crt_final_image(vec2 pos)
 
     vec2 projected_pos = vec2(pos.x, pos.y) - offsets;
 
-    /*
-        Some tracking errors.
-    */
-    float tracking_error = 0.015 * snoise(pos.yy * 16) * snoise(pos.yy + vec2(7 * shadron_Time));
+    
 
     float scanline = abs(cos(pos.y * CRT_SCANLINES * 3.1417));
 
@@ -200,7 +207,7 @@ glsl vec4 crt_final_image(vec2 pos)
     */
 
     vec3 dry = texture(buffer_in, pos).rgb;
-    vec3 wet =  scanline * texture(buffer_chroma_blur, projected_pos - vec2(0.1) * tracking_error).rgb * 1.4;
+    vec3 wet =  scanline * texture(buffer_chroma_blur, projected_pos).rgb * 1.4;
 
     return vec4(
         mix(srgb_gamma_correct(wet), dry, pos.x >1 ), 
