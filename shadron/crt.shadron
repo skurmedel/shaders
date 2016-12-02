@@ -14,6 +14,11 @@ glsl
 animation buffer_in = sequence("../testimgs/pulp/pulp*.png", 25) : filter(bilinear);
 
 /*
+    The uniform holding the current time elapsed as a float. It can wrap around
+    after a couple of seconds without problems.
+*/
+#define CRT_TIME_UNIFORM        shadron_Time
+/*
     How many horizontal lines we have per screen height.
 */
 #define CRT_SCANLINES           480
@@ -26,6 +31,16 @@ animation buffer_in = sequence("../testimgs/pulp/pulp*.png", 25) : filter(biline
     How far the colour channels are allowed to separate in pixels.
 */
 #define CRT_WORST_CONVERGENCE   8.0
+/*
+    Scales the impurity distance from center factor.
+*/
+#define CRT_IMPURITY_CENTER_DISTANCE_SCALE  12.0
+/*
+    The magnitude of the ripple for the tracking error effect.
+
+    Increase to get more wobbly "VHS"/"bad antenna" look.
+*/
+#define CRT_TRACKING_ERROR_SCALE     0.015 
 
 /*
     How much to blur the UV channels in the YUV processing step.
@@ -63,7 +78,7 @@ parameter vec2  proj_scale   = vec2(0.9) : range(vec2(-2), vec2(2));
 /*
     How strong luma noise to add.
 */
-parameter float noise_scale = 0.015 : range(0, 1);
+parameter float noise_scale = 0.025 : range(0, 1);
 /*
     How well the three colour channels converge. A value of 1 means perfectly.
 
@@ -71,6 +86,12 @@ parameter float noise_scale = 0.015 : range(0, 1);
     converge in the center of the image.
 */
 parameter float convergence = 0.65 : range(0, 1);
+/*
+    Simulates some electrons for a given colour hitting the phosphor for another
+    colour, e.g, some of the red beam hits some green phosphors which produces
+    incorrect colours.
+*/
+parameter float impurity = 0.35 : range(0, 1);
 
 /*
     Converts the input to Y'UV.
@@ -78,8 +99,9 @@ parameter float convergence = 0.65 : range(0, 1);
 glsl vec4 crt_yuv(sampler2D self, vec2 pos, float dt)
 {
     /* 
-        Emulate 4:2:2 chroma subsampling by only repeating every even pixel in 
-        the horizontal.
+        Simulate 8:4:4 chroma subsampling by repeating every fourth pixel fourth
+        times in the horizontal. We should probably average these out for a 
+        more faithful effect, but too costly for little gain.
     */
     vec2 img_sz = sizeof(buffer_in);
     vec2 pixel_sz = 1.0/img_sz;
@@ -87,13 +109,15 @@ glsl vec4 crt_yuv(sampler2D self, vec2 pos, float dt)
         Changing the moduli here gives a more pronounced effect but for large 
         values it will look horrible.
     */
-    int idx = -int(pos.x * img_sz.x) % 2;
+    int idx = -int(pos.x * img_sz.x) % 4;
 
     /*
         Some tracking errors (the beam being inconsistent between scans), not 
-        very realistic but adds subtle plausible look.
+        very realistic but adds subtle plausible look, it also makes it look a
+        bit like bad antenna reception or a shitty VHS. It helps sell the 
+        look.
     */
-    float tracking_error = 0.015 * snoise(pos.yy * 16) * snoise(pos.yy + vec2(7 * shadron_Time));
+    float tracking_error = CRT_TRACKING_ERROR_SCALE * snoise(pos.yy * 16) * snoise(pos.yy + vec2(7 * CRT_TIME_UNIFORM));
     
     /*
         Our input is sRGB, so lets linearize it (remove the gamma correction),
@@ -136,7 +160,7 @@ glsl vec3 crt_chroma_blur(sampler2D self, vec2 pos, float dt)
     /*
         Add some luma noise.
     */
-    float noise = snoise(200 * pos + 239 * shadron_Time);
+    float noise = snoise(200 * pos + 239 * CRT_TIME_UNIFORM);
     noise *= noise * noise * noise_scale;
     yuv.x += noise * (1.0-yuv.x);
 
@@ -172,14 +196,7 @@ glsl vec4 crt_final_image(vec2 pos)
 
     vec2 projected_pos = vec2(pos.x, pos.y) - offsets;
 
-    
-
     float scanline = abs(cos(pos.y * CRT_SCANLINES * 3.1417/2));
-
-    /*
-        We can now sample the other buffers and compose the final image.
-        
-    */
 
     /*
         Sample three times, one for each colour channel and offset by convergence.
@@ -188,7 +205,18 @@ glsl vec4 crt_final_image(vec2 pos)
     float g = texture(buffer_chroma_blur, projected_pos).g;
     float b = texture(buffer_chroma_blur, projected_pos * (1 + CRT_WORST_CONVERGENCE/img_sz.x * (1.0 - convergence))).b;
     
-    vec3 wet =  scanline * vec3(r,g,b) * 1.4;
+    /*
+        Impurity calculations, where we muddle together the channels a bit to 
+        fake CRT impurity.
+    */
+    float impurity_scale = (screen_pos.x * screen_pos.x + screen_pos.y * screen_pos.y) * CRT_IMPURITY_CENTER_DISTANCE_SCALE;
+    mat3 impurity_mat = mat3(
+        0.7,    0.0,    0.2,
+        0.3,    0.6,    0.1,
+        0.2,    0.2,    0.4
+    );
+      
+    vec3 wet =  scanline * mix(vec3(r,g,b), impurity_mat * vec3(r,g,b), impurity_scale * impurity) * 1.4;
 
     return vec4(
         srgb_gamma_correct(wet), 
