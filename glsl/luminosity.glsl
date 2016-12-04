@@ -1,5 +1,5 @@
 /*
-    Luminosity ("luma") calculations. Use these functions to correctly calculate 
+    Luminosity calculations. Use these functions to correctly calculate 
     the luminosity of a a colour for different colour spaces.
 
     You can also use the appropriate functions to partially desaturate a colour.
@@ -11,7 +11,7 @@
     
     The following defines can be used to filter out standards not needed.
         
-        LUMA_NO_REC709_SUPPORT
+        LUMINOSITY_NO_REC709_SUPPORT
     
 ################################################################################
     NOTE: WHEN USING THESE ROUTINES, IT ASSUMED YOU ARE IN LINEAR SPACE.
@@ -29,7 +29,7 @@ const vec3 SRGB_Y_VALUES = vec3(0.2126, 0.7152, 0.0722);
 
     The (CIE) Y values used are: 0.2126, 0.7152, 0.0722.
 */ 
-float srgb_luma(in vec3 rgb)
+float srgb_luminosity(in vec3 rgb)
 {
     return rgb.r * SRGB_Y_VALUES.r
          + rgb.g * SRGB_Y_VALUES.g
@@ -45,24 +45,24 @@ float srgb_luma(in vec3 rgb)
 */
 vec3 srgb_saturation(in vec3 rgb, in lowp float x)
 {
-    return mix(srgb_luma(rgb) * vec3(1), rgb, x);
+    return mix(srgb_luminosity(rgb) * vec3(1), rgb, x);
 }
 
-#ifdef LUMA_NO_REC709_SUPPORT
+#ifdef LUMINOSITY_NO_REC709_SUPPORT
 
 /*
     As you can see here, Rec.709 use the same Y values and as such we can use 
-    the sRGB luma functions. 
+    the sRGB luminosity functions. 
 
     Note! The gamma is not the same! So you must still make sure you are using 
     a Rec.709 gamma correct workflow.
 */ 
 const vec3 REC709_Y_VALUES = SRGB_Y_VALUES;
 
-#define rec709_luma         srgb_luma
+#define rec709_luminosity   srgb_luminosity
 #define rec709_saturation   srgb_saturation
 
-#endif // LUMA_NO_REC709_SUPPORT
+#endif // LUMINOSITY_NO_REC709_SUPPORT
 
 /*   Copyright (c) 2016 Simon Otter
 
