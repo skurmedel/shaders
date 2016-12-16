@@ -8,10 +8,11 @@ glsl
 {
     #include "../glsl/gamma_correct.glsl"
     #include "snoise.glsl"
+    #include "../glsl/cie.glsl"
 }
 
 #line 1012
-animation buffer_in = sequence("../testimgs/pulp/pulp*.png", 25) : filter(bilinear);
+animation buffer_in = sequence("../testimgs/pulp/pulp*.png", 25) : filter(bilinear), full_range(true);
 
 /*
     The uniform holding the current time elapsed as a float. It can wrap around
@@ -48,55 +49,55 @@ animation buffer_in = sequence("../testimgs/pulp/pulp*.png", 25) : filter(biline
     This uses mipmapping for cheapo blur, so the quality and steps depend on 
     the settings for the textures.
 */
-parameter float uv_blur     = 4   : range(0, 5);
+parameter float uv_blur             = 4.35   : range(0, 5);
 /*
     How much to blur the Y channel in the YUV processing step.
 
     This uses mipmapping for cheapo blur, so the quality and steps depend on 
     the settings for the textures.
 */
-parameter float luma_blur   = 1   : range(0, 5);
+parameter float luminosity_blur     = 1   : range(0, 5);
 /*
     How much "afterimage". This is scaled by the previous frame luminosity at 
     each pixel: the idea is it more strongly affects highlights where the "beam" 
     has higher energy and the phosphor emits for longer.
 */
-parameter float ghosting    = 0.8 : range(0, 1);
+parameter float ghosting            = 0.8 : range(0, 1);
 /*
     A standard black level lift.
 */
-parameter float lift        = 0.003 : range(0, 1);
+parameter float lift                = 0.003 : range(0, 1);
 /*
     The distance of the projected screen, this affects the screen warping and
     bending. Set at 1 for a straight image.
 */
-parameter float screen_dist = 0.9 : range(0, 2);
+parameter float screen_dist         = 0.9 : range(0, 2);
 /*
     Scales the projected screen in XY for greater control.
 */
-parameter vec2  proj_scale   = vec2(0.9) : range(vec2(-2), vec2(2));
+parameter vec2  proj_scale          = vec2(0.9) : range(vec2(-2), vec2(2));
 /*
-    How strong luma noise to add.
+    How strong luminosity noise to add.
 */
-parameter float noise_scale = 0.025 : range(0, 1);
+parameter float noise_scale         = 0.025 : range(0, 1);
 /*
     How well the three colour channels converge. A value of 1 means perfectly.
 
     The shader always have perfect "static convergence", meaning they always 
     converge in the center of the image.
 */
-parameter float convergence = 0.65 : range(0, 1);
+parameter float convergence         = 0.65 : range(0, 1);
 /*
     Simulates some electrons for a given colour hitting the phosphor for another
     colour, e.g, some of the red beam hits some green phosphors which produces
     incorrect colours.
 */
-parameter float impurity = 0.35 : range(0, 1);
+parameter float impurity            = 0.10 : range(0, 1);
 
 /*
     Converts the input to Y'UV.
 */
-glsl vec4 crt_yuv(sampler2D self, vec2 pos, float dt)
+glsl vec3 crt_LAB(sampler2D self, vec2 pos, float dt)
 {
     /* 
         Simulate 8:4:4 chroma subsampling by repeating every fourth pixel fourth
@@ -126,57 +127,60 @@ glsl vec4 crt_yuv(sampler2D self, vec2 pos, float dt)
     vec3 rgb = srgb_gamma_linearize(texture(buffer_in, pos + idx * vec2(pixel_sz.x, 0) - vec2(0.1) * tracking_error).rgb);
 
     /*
-        Rec601 luma weights. 
-        Todo: We should use the ones from luma.glsl.
+        Rec601 luminosity weights. 
+        Todo: We should use the ones from luminosity.glsl.
     */
-    vec4 yuv = vec4(1);
-    yuv.x = 0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b;
-    yuv.y = 0.436 * (rgb.b - yuv.x)/(1.0 - 0.114);
-    yuv.z = 0.615 * (rgb.r - yuv.x)/(1.0 - 0.299);
+    //vec4 yuv = vec4(1);
+    //yuv.x = 0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b;
+    //yuv.y = 0.436 * (rgb.b - yuv.x)/(1.0 - 0.114);
+    //yuv.z = 0.615 * (rgb.r - yuv.x)/(1.0 - 0.299);
+
+    vec3 XYZ = Rec709_to_XYZ(rgb);
+    vec3 LAB = XYZ_to_LAB_D65(XYZ);
+    LAB *= vec3(1, 1, 1);
+
     /*
-        Apply lift to luma.
+        Apply lift to luminosity. (L is in [0, 100] so we must multiply lift.)
     */
-    yuv.x = max(lift, yuv.x);
+    //LAB.x = max(lift * 100.0, LAB.x);
 
     /*
         Apply some ghosting here. It easier here because we still have access to 
         the luminosity information and can use it to control the ghosting.
     */
-    vec4 prev = texture(self, pos, 2);
+    //vec3 prev = texture(self, pos, 2).rgb;
 
-    return yuv + prev * clamp(ghosting * prev.x, 0.0, 0.7); 
+    //return LAB * 0.5 + prev * clamp(ghosting * prev.y, 0.0, 0.5);
+    return LAB;
 }
 
-feedback buffer_yuv = glsl(crt_yuv, sizeof(buffer_in)): full_range(true), hidden(true), filter(trilinear), map(mirror);
+feedback buffer_LAB = glsl(crt_LAB, sizeof(buffer_in)): full_range(true), hidden(true), filter(trilinear), map(mirror);
 
 glsl vec3 crt_chroma_blur(sampler2D self, vec2 pos, float dt)
 {
     /*
         Blur the chromaticity a bit.
     */
-    vec3 blur_uv = texture(buffer_yuv, pos, uv_blur).rgb;
-    vec3 yuv = vec3(texture(buffer_yuv, pos, luma_blur).r, blur_uv.g, blur_uv.b);
+    //vec2 blur_ab = texture(buffer_LAB, pos, uv_blur).yz;
+    //float blur_L = texture(buffer_LAB, pos, luminosity_blur).x;
+    //vec3 LAB = vec3(blur_L, blur_ab);
+    vec3 LAB = texture(buffer_LAB, pos).rgb;
 
     /*
-        Add some luma noise.
+        Add some luminosity noise.
     */
     float noise = snoise(200 * pos + 239 * CRT_TIME_UNIFORM);
     noise *= noise * noise * noise_scale;
-    yuv.x += noise * (1.0-yuv.x);
+    
+    //LAB.x += noise * (100.0-LAB.x);
 
-    /*
-        We go back to linear sRGB from Y'UV.
-    */
-    vec3 new = vec3(
-        yuv.x + 1.14 * yuv.z,
-        yuv.x - 0.395 * yuv.y - 0.581 * yuv.z,
-        yuv.x + 2.033 * yuv.y
-    );
+    vec3 XYZ = LAB_to_XYZ_D65(LAB);
+    vec3 new = XYZ_to_Rec709(XYZ);
     
     return new;
 }
 
-feedback buffer_chroma_blur = glsl(crt_chroma_blur, sizeof(buffer_yuv)): full_range(true), hidden(true), map(clamp), synchronize(buffer_yuv);
+feedback buffer_chroma_blur = glsl(crt_chroma_blur, sizeof(buffer_LAB)): full_range(true), hidden(false), map(clamp), synchronize(buffer_LAB);
 
 glsl vec4 crt_final_image(vec2 pos)
 {
