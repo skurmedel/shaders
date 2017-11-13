@@ -9,10 +9,11 @@ glsl
     #include "../glsl/gamma_correct.glsl"
     #include "snoise.glsl"
     #include "../glsl/cie.glsl"
+    #include "../glsl/luminosity.glsl"
 }
 
-#line 1012
-animation buffer_in = sequence("../testimgs/pulp/pulp*.png", 25) : filter(bilinear), full_range(true);
+#line 10016
+animation buffer_in = sequence("../testimgs/pulp/pulp*.png", 25) : filter(bilinear), full_range(true), repeat(true);
 
 /*
     The uniform holding the current time elapsed as a float. It can wrap around
@@ -41,32 +42,17 @@ animation buffer_in = sequence("../testimgs/pulp/pulp*.png", 25) : filter(biline
 
     Increase to get more wobbly "VHS"/"bad antenna" look.
 */
-#define CRT_TRACKING_ERROR_SCALE     0.015 
+#define CRT_TRACKING_ERROR_SCALE     0.025 
 
-/*
-    How much to blur the UV channels in the YUV processing step.
-
-    This uses mipmapping for cheapo blur, so the quality and steps depend on 
-    the settings for the textures.
-*/
-parameter float uv_blur             = 4.35   : range(0, 5);
-/*
-    How much to blur the Y channel in the YUV processing step.
-
-    This uses mipmapping for cheapo blur, so the quality and steps depend on 
-    the settings for the textures.
-*/
-parameter float luminosity_blur     = 1   : range(0, 5);
 /*
     How much "afterimage". This is scaled by the previous frame luminosity at 
     each pixel: the idea is it more strongly affects highlights where the "beam" 
     has higher energy and the phosphor emits for longer.
 */
 parameter float ghosting            = 0.8 : range(0, 1);
-/*
-    A standard black level lift.
-*/
-parameter float lift                = 0.003 : range(0, 1);
+
+parameter float ghosting_blur       = 5 : range(0, 10);
+
 /*
     The distance of the projected screen, this affects the screen warping and
     bending. Set at 1 for a straight image.
@@ -79,39 +65,23 @@ parameter vec2  proj_scale          = vec2(0.9) : range(vec2(-2), vec2(2));
 /*
     How strong luminosity noise to add.
 */
-parameter float noise_scale         = 0.025 : range(0, 1);
+parameter float noise_scale         = 0.015 : range(0, 1);
 /*
     How well the three colour channels converge. A value of 1 means perfectly.
 
     The shader always have perfect "static convergence", meaning they always 
     converge in the center of the image.
 */
-parameter float convergence         = 0.65 : range(0, 1);
+parameter float convergence         = 0.45 : range(0, 1);
 /*
     Simulates some electrons for a given colour hitting the phosphor for another
     colour, e.g, some of the red beam hits some green phosphors which produces
     incorrect colours.
 */
-parameter float impurity            = 0.10 : range(0, 1);
+parameter float impurity            = 0.75 : range(0, 2);
 
-/*
-    Converts the input to Y'UV.
-*/
-glsl vec3 crt_LAB(sampler2D self, vec2 pos, float dt)
+glsl vec3 crt_ghost(sampler2D self, vec2 pos, float dt)
 {
-    /* 
-        Simulate 8:4:4 chroma subsampling by repeating every fourth pixel fourth
-        times in the horizontal. We should probably average these out for a 
-        more faithful effect, but too costly for little gain.
-    */
-    vec2 img_sz = sizeof(buffer_in);
-    vec2 pixel_sz = 1.0/img_sz;
-    /*
-        Changing the moduli here gives a more pronounced effect but for large 
-        values it will look horrible.
-    */
-    int idx = -int(pos.x * img_sz.x) % 4;
-
     /*
         Some tracking errors (the beam being inconsistent between scans), not 
         very realistic but adds subtle plausible look, it also makes it look a
@@ -124,63 +94,28 @@ glsl vec3 crt_LAB(sampler2D self, vec2 pos, float dt)
         Our input is sRGB, so lets linearize it (remove the gamma correction),
         first.
     */
-    vec3 rgb = srgb_gamma_linearize(texture(buffer_in, pos + idx * vec2(pixel_sz.x, 0) - vec2(0.1) * tracking_error).rgb);
+    vec3 rgb = srgb_gamma_linearize(texture(buffer_in, pos - vec2(0.1) * tracking_error).rgb);
 
     /*
-        Rec601 luminosity weights. 
-        Todo: We should use the ones from luminosity.glsl.
+        Calculate the luminosity and scale it between 7 and 10.
     */
-    //vec4 yuv = vec4(1);
-    //yuv.x = 0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b;
-    //yuv.y = 0.436 * (rgb.b - yuv.x)/(1.0 - 0.114);
-    //yuv.z = 0.615 * (rgb.r - yuv.x)/(1.0 - 0.299);
+    float luminosity = srgb_luminosity(rgb);
 
-    vec3 XYZ = Rec709_to_XYZ(rgb);
-    vec3 LAB = XYZ_to_LAB_D65(XYZ);
-    LAB *= vec3(1, 1, 1);
+    rgb = mix(rgb, vec3(luminosity), tracking_error * 20);
 
-    /*
-        Apply lift to luminosity. (L is in [0, 100] so we must multiply lift.)
-    */
-    //LAB.x = max(lift * 100.0, LAB.x);
+    vec3 noise = vec3((1.0 - luminosity) * noise_scale * snoise(pos.xy * 256) * snoise(pos.yy + vec2(2 * CRT_TIME_UNIFORM)));
 
     /*
         Apply some ghosting here. It easier here because we still have access to 
         the luminosity information and can use it to control the ghosting.
     */
-    //vec3 prev = texture(self, pos, 2).rgb;
-
-    //return LAB * 0.5 + prev * clamp(ghosting * prev.y, 0.0, 0.5);
-    return LAB;
+    vec3 prev = pow(texture(self, pos, ghosting_blur).rgb, vec3(1.2));
+    rgb += clamp(ghosting * (0.7 + luminosity * 0.3) * prev, 0.0, 1.0) + noise;
+    
+    return rgb;
 }
 
-feedback buffer_LAB = glsl(crt_LAB, sizeof(buffer_in)): full_range(true), hidden(true), filter(trilinear), map(mirror);
-
-glsl vec3 crt_chroma_blur(sampler2D self, vec2 pos, float dt)
-{
-    /*
-        Blur the chromaticity a bit.
-    */
-    //vec2 blur_ab = texture(buffer_LAB, pos, uv_blur).yz;
-    //float blur_L = texture(buffer_LAB, pos, luminosity_blur).x;
-    //vec3 LAB = vec3(blur_L, blur_ab);
-    vec3 LAB = texture(buffer_LAB, pos).rgb;
-
-    /*
-        Add some luminosity noise.
-    */
-    float noise = snoise(200 * pos + 239 * CRT_TIME_UNIFORM);
-    noise *= noise * noise * noise_scale;
-    
-    //LAB.x += noise * (100.0-LAB.x);
-
-    vec3 XYZ = LAB_to_XYZ_D65(LAB);
-    vec3 new = XYZ_to_Rec709(XYZ);
-    
-    return new;
-}
-
-feedback buffer_chroma_blur = glsl(crt_chroma_blur, sizeof(buffer_LAB)): full_range(true), hidden(false), map(clamp), synchronize(buffer_LAB);
+feedback buffer_ghost = glsl(crt_ghost, sizeof(buffer_in)): full_range(true), hidden(true), map(clamp), filter(trilinear);
 
 glsl vec4 crt_final_image(vec2 pos)
 {
@@ -205,9 +140,13 @@ glsl vec4 crt_final_image(vec2 pos)
     /*
         Sample three times, one for each colour channel and offset by convergence.
     */
-    float r = texture(buffer_chroma_blur, projected_pos * (1 + CRT_WORST_CONVERGENCE/img_sz.x * (1.0 - convergence))).r;
-    float g = texture(buffer_chroma_blur, projected_pos).g;
-    float b = texture(buffer_chroma_blur, projected_pos * (1 + CRT_WORST_CONVERGENCE/img_sz.x * (1.0 - convergence))).b;
+    vec3 green_sample = texture(buffer_ghost, projected_pos).rgb;
+    vec3 red_sample = texture(buffer_ghost, projected_pos * (1 + CRT_WORST_CONVERGENCE/img_sz.x * (1.0 - convergence))).rgb;
+    vec3 blue_sample = texture(buffer_ghost, projected_pos * (1 - CRT_WORST_CONVERGENCE/img_sz.x * (1.0 - convergence))).rgb;
+
+    float r = red_sample.r;
+    float g = green_sample.g;
+    float b = blue_sample.b;
     
     /*
         Impurity calculations, where we muddle together the channels a bit to 
@@ -219,8 +158,11 @@ glsl vec4 crt_final_image(vec2 pos)
         0.3,    0.6,    0.1,
         0.2,    0.2,    0.4
     );
+
+    vec3 impure = mix(vec3(r,g,b), impurity_mat * vec3(r,g,b), impurity_scale * impurity) * 1.4;
       
-    vec3 wet =  scanline * mix(vec3(r,g,b), impurity_mat * vec3(r,g,b), impurity_scale * impurity) * 1.4;
+    vec3 wet = scanline * impure;
+
 
     return vec4(
         srgb_gamma_correct(wet), 
@@ -228,6 +170,6 @@ glsl vec4 crt_final_image(vec2 pos)
         * smoothstep(1.005, 1.0, projected_pos.y) * smoothstep(1.005, 1.0, 1.0-projected_pos.y));
 }
 
-animation buffer_out = glsl(crt_final_image, sizeof(buffer_chroma_blur));
+animation buffer_out = glsl(crt_final_image, sizeof(buffer_ghost));
 
-export png_sequence(buffer_out, "D:\\Code\\Repos\\shaders\\testimgs\\awsdwrf\\pulp-lol?.png", 25, 4.8);
+//export png_sequence(buffer_out, "D:\\Code\\Repos\\shaders\\testimgs\\awsdwrf\\pulp-lol?.png", 25, 4.8);
