@@ -48,7 +48,7 @@ vec3 srgb_saturation(in vec3 rgb, in lowp float x)
     return mix(srgb_luminosity(rgb) * vec3(1), rgb, x);
 }
 
-#ifdef LUMINOSITY_NO_REC709_SUPPORT
+#ifndef LUMINOSITY_NO_REC709_SUPPORT
 
 /*
     As you can see here, Rec.709 use the same Y values and as such we can use 
