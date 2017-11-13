@@ -1,0 +1,202 @@
+#version 400
+
+glsl
+{
+    #include "../glsl/gamma_correct.glsl"
+    #include "snoise.glsl"
+}
+
+parameter vec3 camera_origin = vec3(0, 1, 15) : range(vec3(-100), vec3(100));
+parameter float hfov         = 0.707: range(0.001, 3.1417);
+parameter float focus_dist   = 0.3302 : range(0.1, 10.0);
+parameter float focus_blur   = 60.0  : range(0, 60.0);
+parameter vec3 light_rgb = vec3(1) : color();
+parameter float light_intensity = 5.0 : range(0.0, 20.0);
+
+#line 10009
+#define ASPECT                      (9.0/16.0)
+#define W                           (720.0)
+#define H                           (ASPECT*W)
+// Samples per Pixel per update: Edit this to set "quality".
+#define PIXEL_SAMPLES               128
+#define FAR_CLIP                    1000000.0
+#define RANDOM_SPHERE_NOISE_MULT    100000.0
+glsl const vec3 BG = vec3(0.00, 0.00, 0.00);
+
+glsl struct Material
+{
+    vec3 albedo;
+    vec3 emission;
+};
+
+glsl struct Sphere
+{
+    vec3 pos;
+    float r;
+    Material mat;
+};
+
+glsl  Sphere[6] spheres = Sphere[6](
+    Sphere
+        (vec3(0,0,0), 1, 
+        Material(
+            vec3(0.01, 0.95, 0.01),
+            vec3(0)
+            )),
+    Sphere
+        (vec3(-1,0,-5), 1, 
+        Material(
+            vec3(0.95, 0.01, 0.01),
+            vec3(0)
+            )),
+    Sphere
+        (vec3(1,0,5), 1, 
+        Material(
+            vec3(0.01, 0.01, 0.95),
+            vec3(0)
+            )),
+    Sphere
+        (vec3(0, 20, 0), 15, 
+        Material(
+            vec3(0),
+            light_intensity * light_rgb
+            )),
+    Sphere
+        (vec3(0, -4996, 0), 4995, 
+        Material(
+            vec3(0.5),
+            vec3(0.0)
+            )),
+    Sphere
+        (vec3(0, 10, -10), 5, 
+        Material(
+            vec3(0),
+            vec3(0.2,0.3,0.6) * 200.0
+            ))
+);
+
+glsl vec3 random_sphere(vec3 state)
+{
+    state *= RANDOM_SPHERE_NOISE_MULT;
+    float r = pow(snoise(state.xy), 0.33333);
+    float z = mix(-1.0, 1.0, snoise(state.yz));
+    float t = mix(0.0, 2 * 3.1417, snoise(state.xz));
+    return vec3(
+        sqrt(r*r - z*z) * cos(t),
+        sqrt(r*r - z*z) * sin(t),
+        z
+    );
+}
+
+glsl vec3 Material_shade(const vec3 P, const vec3 N, const Material mat)
+{
+    return vec3(mat.albedo * max(0.1, dot(N, normalize(vec3(1, 1, -1)) )) );
+}
+
+glsl bool Sphere_ray_intersects(const vec3 o, const vec3 d, const in Sphere sphere, inout float t)
+{
+    vec3 o_p = o - sphere.pos;
+    float d_mag2 = dot(d, d);
+
+    float p = + 2.0 * dot(o_p, d) / d_mag2;
+    
+    float denominator = (p/2)*(p/2) - (dot(o_p, o_p)/d_mag2 - sphere.r * sphere.r);
+    
+    if (denominator < 0)
+        return false;
+
+    float sqrt_part = sqrt(denominator);
+    t = min(-p/2 + sqrt_part, -p/2 - sqrt_part);
+    return true;
+}
+
+glsl vec3 Sphere_normal(in vec3 P, const in Sphere s)
+{
+    return normalize(P - s.pos);
+}
+
+glsl vec3 trace_ray(vec3 o, vec3 d, int state) 
+{
+    vec3 colour = vec3(0);
+    vec3 atten = vec3(1);
+    for (int s = 0; s < 8; s++)
+    {
+        float closest_t = FAR_CLIP;
+        int closest_k = -1;
+        /*
+            Try to intersect objects.
+        */
+        for (int k = 0; k < 6; k++)
+        {
+            float t2 = FAR_CLIP;
+            Sphere_ray_intersects(o, d, spheres[k], t2);
+            if (t2 >= 0.0 && t2 < closest_t)
+            {
+                closest_t = t2;
+                closest_k = k;
+            }            
+        }
+
+        if (closest_k < 0 || closest_t >= FAR_CLIP)
+        {
+            colour += atten * BG;
+            break;
+        }
+        
+        Sphere sph = spheres[closest_k];
+        vec3 P = o + closest_t * d;
+        vec3 N = Sphere_normal(P, sph);
+
+        colour += atten * (sph.mat.emission);
+        atten *= sph.mat.albedo;
+
+        d = normalize(N + random_sphere(P+vec3(s*state)));
+        o = P + 0.000001 * N;
+    }
+    return colour/3.1417;
+}
+
+glsl vec4 trace_camera(vec2 pixel_coord)
+{
+    vec2 pixel_sz = vec2(1/W, 1/H);
+
+    const vec3 u = vec3(1, 0, 0);
+    const vec3 v = vec3(0, 1, 0);
+    const vec3 w = vec3(0, 0, 1);
+
+    float horiz = atan(hfov/2) * focus_dist;
+    float vert  = ASPECT * horiz;
+    vec3 corner = camera_origin - horiz * u - vert * v  - focus_dist * w;
+
+    vec3 colour = vec3(0);
+    for (int i = 0; i < PIXEL_SAMPLES; i++)
+    {
+        float noise_offset = (0.1 + i + shadron_Time);
+        vec2 noise = vec2(snoise(noise_offset * pixel_coord.yx)-0.5, snoise(noise_offset * pixel_coord.xy)-0.5) * pixel_sz;
+
+        vec3 o = camera_origin + noise.x * u * focus_blur + noise.y * v * focus_blur;
+        vec3 d = normalize(corner + pixel_coord.x * 2.0 * horiz * u + pixel_coord.y * 2.0 * vert * v - camera_origin - vec3(noise, 0));
+
+
+        colour += trace_ray(o, d, i);
+    }
+
+    return vec4(colour, PIXEL_SAMPLES);
+}
+
+glsl vec4 trace_camera_continous(sampler2D self, vec2 pixel_coord, float deltaT)
+{
+    vec4 ns = trace_camera(pixel_coord);
+    vec4 ps = texture(self, pixel_coord);
+    return (ns + ps);
+}
+
+feedback sampling = glsl(trace_camera_continous, W, H): initialize(trace_camera), filter(bilinear), update_rate(3), full_range(true), hidden(true);
+
+glsl vec4 finalize_image(sampler2D self, vec2 position, float deltaT)
+{
+    vec4 pixel = texture(sampling, position);
+    return vec4(srgb_gamma_correct((pixel.rgb) / (pixel.a)), 1);
+}
+
+feedback buffer_out = glsl(finalize_image, W, H) : synchronize(sampling);
