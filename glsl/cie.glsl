@@ -34,19 +34,19 @@
 /*
     Convert a Rec709 linear triplet to a XYZ one.
 */ 
-vec3 Rec709_to_XYZ(vec3 RGB)
+highp vec3 Rec709_to_XYZ_D65(highp vec3 RGB)
 {
     return mat3(
-            0.412453,   0.357580,   0.180423,
-            0.212671,   0.715160,   0.072169,
-            0.019334,   0.119193,   0.950227
+            0.4124564,  0.3575761,  0.1804375,
+            0.2126729,  0.7151522,  0.0721750,
+            0.0193339,  0.1191920,  0.9503041
     ) * RGB;
 }
 
 /* 
     Convert a XYZ triplet to a linear Rec709 one. 
 */
-vec3 XYZ_to_Rec709(vec3 XYZ)
+highp vec3 XYZ_to_Rec709_D65(highp vec3 XYZ)
 {
     return mat3(
             3.240479,   -1.537150,  -0.498535,
@@ -58,51 +58,126 @@ vec3 XYZ_to_Rec709(vec3 XYZ)
 /*
     Converts a XYZ triplet to a xyY (CIE chromaticity coordinates).
 */
-vec3 XYZ_to_xyY(vec3 XYZ)
+highp vec3 XYZ_to_xyY(highp vec3 XYZ)
 {
-    return vec3(
-        XYZ.x / (XYZ.x + XYZ.y + XYZ.z),
-        XYZ.y / (XYZ.x + XYZ.y + XYZ.z),
-        XYZ.y
+    return mix(
+        vec3(0.3127, 0.3290, 0), // Todo: We assume D65 here!!!
+        vec3(
+            XYZ.x / (XYZ.x + XYZ.y + XYZ.z),
+            XYZ.y / (XYZ.x + XYZ.y + XYZ.z),
+            XYZ.y
+        ),
+        step(0.000001, XYZ.x + XYZ.y + XYZ.z)
     );
 }
 
 /*
     Converts a xyY triplet to XYZ.
 */
-vec3 xyY_to_XYZ(vec3 xyY)
+vec3 xyY_to_XYZ(highp vec3 xyY)
 {
-    float X = (xyY.x / xyY.y) * xyY.z;
-    float Y = xyY.z;
-    float Z = ((1.0 - xyY.x - xyY.y) / xyY.y) * xyY.z;
-    return vec3(X, Y, Z);    
+    return mix(
+        vec3(0, 0, 0),
+        vec3(
+            (xyY.z / xyY.y) * xyY.x,
+            xyY.z,
+            (1.0 - xyY.x - xyY.y) * (xyY.z / xyY.y)
+        ),
+        step(0, xyY.y)
+    );
 }
 
 const float LAB_f_epsilon  = 0.008856;
 const float LAB_f_kappa    = 903.3;
 
 /*
-    XYZ white point reference for D65, with Y = 100 as normalization.
+    xyY whitepoint for D65.
+*/
+const vec2 xyY_D65 = vec2(
+    0.31271,
+    0.32902
+);
+
+/*
+    XYZ white point reference for D65 normalized to Y = 1.
 */
 const vec3 XnYnZn_D65 = vec3(
-    95.047,
-    100,
-    108.883
-);   
+    0.950470,
+    1.000000,
+    0.108883
+);
 
-vec3 LAB_RGB_compand(vec3 RGB)
+/*
+    u' v' coordinates of D65 for CIELUV. 
+*/
+const vec2 LUV_uv_prim_D65 = vec2(
+    (4.0 * XnYnZn_D65.x) / (XnYnZn_D65.x + 15 * XnYnZn_D65.y + 3 * XnYnZn_D65.z),
+    (9.0 * XnYnZn_D65.y) / (XnYnZn_D65.x + 15 * XnYnZn_D65.y + 3 * XnYnZn_D65.z)
+);
+
+vec2 LUV_uv_prim(vec3 XYZ) 
 {
-    vec3 
+    return vec2(
+        (4.0 * XYZ.x) / (XYZ.x + 15.0 * XYZ.y + 3.0 * XYZ.z),
+        (9.0 * XYZ.y) / (XYZ.x + 15.0 * XYZ.y + 3.0 * XYZ.z)
+    );
+}
+
+/*
+    Converts from CIE XYZ to CIELUV with illuminant D65.
+
+    The resulting vector has components vec3(L, u, v);
+*/
+vec3 XYZ_to_LUV_D65(vec3 XYZ)
+{    
+    float Y_over_Yn = XYZ.y / XnYnZn_D65.y;
+
+    float L = mix(
+        LAB_f_kappa * Y_over_Yn,
+        116.0 * pow(Y_over_Yn, 1.0/3.0) - 16.0,
+        step(LAB_f_epsilon, Y_over_Yn)
+    );
+    vec2 uv_prim = LUV_uv_prim(XYZ);
+    float u = 13.0 * L * (uv_prim.x - LUV_uv_prim_D65.x);
+    float v = 13.0 * L * (uv_prim.y - LUV_uv_prim_D65.y);
+
+    return vec3(L, u, v);
+}
+
+/*
+    Converts a CIELUV triplet to XYZ with illuminant D65.
+*/
+vec3 LUV_to_XYZ_D65(vec3 LUV)
+{
+    float L = LUV.x;
+    float u = LUV.y;
+    float v = LUV.z;
+
+    float Y = mix(
+        L / LAB_f_kappa,
+        pow((L + 16.0) / 116.0, 3.0),
+        step(LAB_f_kappa * LAB_f_epsilon, L)
+    );
+
+    float a = (1.0/3.0) * ((52.0 * L) / (u + 13.0 * L * LUV_uv_prim_D65.x) - 1.0);
+    float b = -5.0 * Y;
+    float c = -1.0/3.0;
+    float d = Y * ((39.0 * L) / (v + 13.0 * L * LUV_uv_prim_D65.y) - 5.0);
+
+    float X = (d - b) / (a - c);
+    float Z = X * a + b;
+
+    return vec3(X, Y, Z);
 }
 
 /*
     Converts from XYZ to LAB with illuminant D65.
 
-    This is the same illuminant as the one used by sRGB and Rec709.
+    This is a common illuminant for sRGB and Rec709, the other one being D50.
 */
 vec3 XYZ_to_LAB_D65(vec3 XYZ)
 {  
-    #define LAB_f(t) (mix(pow(t, 1.0/3.0), (LAB_f_kappa * t + 16) / 116, step(LAB_f_epsilon, t)))
+    #define LAB_f(t) (mix((LAB_f_kappa * t + 16) / 116, pow(t, 1.0/3.0), step(LAB_f_epsilon, t)))
 
     float f_y = LAB_f(XYZ.y/XnYnZn_D65.y);
 
@@ -123,7 +198,7 @@ vec3 LAB_to_XYZ_D65(vec3 LAB)
 {
     float L = LAB.x; float a = LAB.y; float b = LAB.z;
 
-    float fy = (L + 16) / 116.0;
+    float fy = (L + 16.0) / 116.0;
     float fx = a / 500.0 + fy;
     float fz = fy - b / 200.0;
 
